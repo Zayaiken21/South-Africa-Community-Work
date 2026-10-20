@@ -6,7 +6,7 @@
 // so the collection grows and stays fresh even with small API allowances.
 //
 // Sources (all optional — one failing never empties the app):
-//   In person, South Africa:  Adzuna (ADZUNA_APP_ID + ADZUNA_APP_KEY secrets), Jooble (JOOBLE_API_KEY secret)
+//   In person, South Africa:  Jooble (JOOBLE_API_KEY secret)
 //   Online, open to SA:       Remotive, Jobicy, Himalayas, Remote OK, Working Nomads, We Work Remotely
 //
 // Output (OUT_DIR, default jobs-data/jobs):
@@ -22,8 +22,6 @@ import {placeFor} from './sa-places.mjs';
 
 const OUT = process.env.OUT_DIR || 'jobs-data/jobs';
 const UA = 'CommunityWorkSA/1.0 (+https://github.com/Zayaiken21/South-Africa-Community-Work)';
-// Adzuna is off unless a run is given calls: a one-off manual run (workflow input) or a repo variable for a paid plan.
-const ADZUNA_CALLS = Number(process.env.ADZUNA_CALLS_PER_RUN || 0);
 const JOOBLE_CALLS = Number(process.env.JOOBLE_CALLS_PER_RUN || 12);
 const KEEP_DAYS = {onsite: 30, remote: 45};
 const CAP = {latest: 1500, category: 4000, province: 4000, remote: 4000};
@@ -63,15 +61,6 @@ const rules = [
 ];
 const categorize = (...t) => (rules.find(([, re]) => re.test(t.filter(Boolean).join(' '))) || ['Other'])[0];
 
-const adzunaTags = {
-  'it-jobs': 'Tech & IT', 'engineering-jobs': 'Engineering', 'accounting-finance-jobs': 'Finance', 'healthcare-nursing-jobs': 'Healthcare',
-  'teaching-jobs': 'Education', 'hospitality-catering-jobs': 'Hospitality', 'retail-jobs': 'Retail', 'logistics-warehouse-jobs': 'Warehouse & logistics',
-  'trade-construction-jobs': 'Construction', 'admin-jobs': 'Admin & office', 'customer-services-jobs': 'Customer service', 'sales-jobs': 'Sales & marketing',
-  'pr-advertising-marketing-jobs': 'Sales & marketing', 'creative-design-jobs': 'Creative & design', 'hr-jobs': 'HR & recruitment', 'legal-jobs': 'Legal',
-  'manufacturing-jobs': 'Manufacturing', 'domestic-help-cleaning-jobs': 'Cleaning', 'energy-oil-gas-jobs': 'Engineering', 'maintenance-jobs': 'Construction',
-  'scientific-qa-jobs': 'Engineering', 'social-work-jobs': 'Healthcare', 'travel-jobs': 'Hospitality',
-};
-
 const strip = html => String(html || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
   .replace(/&quot;/g, '"').replace(/&#0?39;|&rsquo;|&lsquo;/g, '’').replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n)).replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
 const excerpt = html => { const t = strip(html); return t.length > 170 ? t.slice(0, 167).replace(/\s+\S*$/, '') + '…' : t; };
@@ -103,64 +92,6 @@ function located(location, lat, lon) {
 }
 
 // ---------- In person (South Africa) ----------
-
-async function adzuna(state) {
-  const id = process.env.ADZUNA_APP_ID, key = process.env.ADZUNA_APP_KEY;
-  if (!ADZUNA_CALLS) { console.log('Adzuna: off (run the workflow by hand with a number of calls to use it)'); return null; }
-  if (!id || !key) { console.log('Adzuna: skipped — add ADZUNA_APP_ID and ADZUNA_APP_KEY secrets'); return null; }
-  const auth = `app_id=${encodeURIComponent(id)}&app_key=${encodeURIComponent(key)}`;
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const jobs = [];
-  let used = 0;
-  // Every call is counted, so stop cleanly (keeping what we have) if the allowance runs out.
-  async function call(url) {
-    if (used >= ADZUNA_CALLS) return null;
-    used++;
-    try { const d = await getJson(url); await sleep(2600); return d; } // free plans allow 25 calls a minute
-    catch (e) { console.warn(`Adzuna: call ${used} failed — ${e.message}`); if (/\b(401|403|429)\b/.test(e.message)) used = ADZUNA_CALLS; return null; }
-  }
-  function add(d) {
-    for (const j of d?.results || []) {
-      const title = strip(j.title), area = j.location?.area || [];
-      const where = strip(j.location?.display_name) || area.slice(1).reverse().join(', ') || 'South Africa';
-      const pos = located(where, j.latitude, j.longitude);
-      const annual = j.salary_is_predicted === '1' ? 0 : (j.salary_min || j.salary_max || 0);
-      jobs.push({
-        id: 'adzuna:' + j.id, source: 'Adzuna', sourceUrl: 'https://www.adzuna.co.za', url: j.redirect_url, title,
-        company: strip(j.company?.display_name) || 'Employer', mode: 'onsite', location: where,
-        province: provinces.find(x => area.includes(x)) || pos.province, lat: pos.lat, lon: pos.lon,
-        category: adzunaTags[j.category?.tag] || categorize(title, j.category?.label),
-        type: [j.contract_time, j.contract_type].filter(Boolean).map(s => s.replace('_', '-')).join(' · ') || undefined,
-        salary: j.salary_is_predicted === '1' ? undefined : salaryLabel(j.salary_min / 12, j.salary_max / 12, 'ZAR', 'per month'),
-        hourlyZar: annual ? Math.round(annual / 2080) : undefined, posted: j.created, excerpt: excerpt(j.description),
-      });
-    }
-  }
-  const search = (page, tag) => {
-    const p = new URLSearchParams({results_per_page: '50', sort_by: 'date', max_days_old: '14', 'content-type': 'application/json'});
-    if (tag) p.set('category', tag);
-    return call(`https://api.adzuna.com/v1/api/jobs/za/search/${page}?${auth}&${p}`);
-  };
-
-  // 1. The newest jobs across all fields (a few pages) — the most current listings.
-  const newestPages = Math.min(3, Math.max(1, Math.floor(ADZUNA_CALLS / 8)));
-  for (let page = 1; page <= newestPages; page++) add(await search(page));
-  // 2. The field list (cached for a week), then the 50 newest in each field, rotating so every field gets a turn.
-  let tags = state.adzunaTags;
-  if ((!tags?.length || (state.adzunaTagsAt || 0) < Date.now() - 7 * 864e5) && used < ADZUNA_CALLS) {
-    const d = await call(`https://api.adzuna.com/v1/api/jobs/za/categories?${auth}`);
-    if (d?.results?.length) { tags = d.results.map(c => c.tag).filter(Boolean); state.adzunaTags = tags; state.adzunaTagsAt = Date.now(); }
-  }
-  tags = tags?.length ? tags : Object.keys(adzunaTags);
-  let cursor = state.adzunaCursor || 0, rounds = 0;
-  while (used < ADZUNA_CALLS && rounds < tags.length) { add(await search(1, tags[cursor % tags.length])); cursor++; rounds++; }
-  // 3. Any calls left over go to older pages of the newest list.
-  for (let page = newestPages + 1; used < ADZUNA_CALLS; page++) add(await search(page));
-  state.adzunaCursor = cursor % tags.length;
-  state.adzunaLastRun = {at: new Date().toISOString(), calls: used, jobs: jobs.length};
-  console.log(`Adzuna: used ${used} of ${ADZUNA_CALLS} calls`);
-  return jobs;
-}
 
 async function jooble(state) {
   const key = process.env.JOOBLE_API_KEY;
@@ -265,7 +196,6 @@ async function weWorkRemotely() {
 }
 
 const sources = [
-  {name: 'Adzuna', url: 'https://www.adzuna.co.za', run: adzuna},
   {name: 'Jooble', url: 'https://za.jooble.org', run: jooble},
   {name: 'Remotive', url: 'https://remotive.com', run: remotive},
   {name: 'Jobicy', url: 'https://jobicy.com', run: jobicy},
@@ -289,6 +219,7 @@ async function previousJobs() {
 }
 
 const state = await readJson(`${OUT}/state.json`, {});
+for (const k of Object.keys(state)) if (k.startsWith('adzuna')) delete state[k];
 const all = await previousJobs();
 const before = all.size;
 const used = new Map();
@@ -310,6 +241,7 @@ for (const s of sources) {
 // Expire old jobs, re-categorise older entries, remove duplicate adverts of the same role.
 const now = Date.now(), seen = new Set();
 let jobs = [...all.values()]
+  .filter(j => j.source !== 'Adzuna')
   .map(j => ({...j, category: fields.includes(j.category) ? j.category : categorize(j.title)}))
   .filter(j => now - Date.parse(j.posted) < KEEP_DAYS[j.mode === 'remote' ? 'remote' : 'onsite'] * 864e5)
   .sort((a, b) => Date.parse(b.posted) - Date.parse(a.posted))

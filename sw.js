@@ -1,5 +1,5 @@
-const CACHE='cw-64098caefa';
-const SHELL=['./','./index.html','./find-work.html','./post-job.html','./saved-jobs.html','./job.html','./offline.html','./cv-builder.html','./assets/community-app.js?v=64098caefa','./assets/community-app.css?v=64098caefa','./assets/favicon.svg','./assets/icons/icon-192.png','./manifest.webmanifest'];
+const CACHE='cw-3f6624ac9a';
+const SHELL=['./','./index.html','./find-work.html','./post-job.html','./saved-jobs.html','./job.html','./offline.html','./cv-builder.html','./assets/community-app.js?v=3f6624ac9a','./assets/community-app.css?v=3f6624ac9a','./assets/favicon.svg','./assets/icons/icon-192.png','./manifest.webmanifest'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(n=>n!==CACHE).map(n=>caches.delete(n)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',e=>{
