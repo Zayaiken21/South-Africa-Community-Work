@@ -1,0 +1,62 @@
+name: Update jobs
+
+# Every 3 hours: fetch the newest jobs, merge them with the ones already published,
+# drop expired ones, and publish the result to the `jobs-data` branch (one commit, replaced each run,
+# so the repository never grows). The app reads the files straight from that branch.
+on:
+  schedule:
+    - cron: '23 */3 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - scripts/fetch-jobs.mjs
+      - scripts/sa-places.mjs
+      - .github/workflows/update-jobs.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-jobs
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get the jobs published last time
+        run: |
+          if git ls-remote --exit-code --heads origin jobs-data >/dev/null; then
+            git fetch --depth 1 origin jobs-data
+            mkdir -p jobs-data
+            git --work-tree=jobs-data checkout FETCH_HEAD -- .
+            git reset -q
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Fetch and merge jobs
+        env:
+          OUT_DIR: jobs-data/jobs
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          JOOBLE_API_KEY: ${{ secrets.JOOBLE_API_KEY }}
+        run: node scripts/fetch-jobs.mjs
+
+      - name: Publish to the jobs-data branch
+        run: |
+          cd jobs-data
+          rm -rf .git
+          printf '# Job data\n\nGenerated every 3 hours by .github/workflows/update-jobs.yml on main. Do not edit.\n' > README.md
+          git init -q -b jobs-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Jobs update $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" jobs-data

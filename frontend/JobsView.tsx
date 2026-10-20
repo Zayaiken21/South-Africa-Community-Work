@@ -9,8 +9,8 @@ import {autoLocate} from './location';
 import {AdSlot} from './ads';
 import {Fragment} from 'react';
 import {
-  API, FEED_URL, browseCategories, money, ago, when, distanceKm, readStore, writeStore, savedJobs, toggleSaved,
-  type Location, type CommunityJob, type Feed, type Listing,
+  API, FEED_URL, DATA_BASE, provinceOf, slugOf, browseCategories, money, ago, when, distanceKm, readStore, writeStore, savedJobs, toggleSaved,
+  type Location, type CommunityJob, type Feed, type FeedJob, type JobIndex, type Listing,
 } from './catalog';
 export {LocationPicker} from './LocationPicker';
 
@@ -43,16 +43,48 @@ export function useAreaLocation() {
 
 // ---------- Data ----------
 
-function useFeed() {
-  const [feed, setFeed] = useState<Feed | null>(null);
+// Loads the newest jobs first, then only the extra files the person needs:
+// their province (in person), the online list, a chosen field, or everything when they search.
+function useFeed({location, mode, category, query}: {location: Location | null; mode: Mode; category: string; query: string}) {
+  const [index, setIndex] = useState<JobIndex | null>(null);
+  const [jobs, setJobs] = useState<Map<string, FeedJob>>(new Map());
   const [error, setError] = useState(false);
-  useEffect(() => {
-    fetch(FEED_URL, {cache: 'no-cache'})
+  const [pending, setPending] = useState(0);
+  const [wantAll, setWantAll] = useState(false);
+  const loaded = useRef(new Set<string>());
+
+  const load = (file: string) => {
+    if (loaded.current.has(file)) return;
+    loaded.current.add(file);
+    setPending(n => n + 1);
+    fetch(DATA_BASE + file)
       .then(r => { if (!r.ok) throw Error(); return r.json(); })
-      .then(d => setFeed(d as Feed))
-      .catch(() => setError(true));
+      .then((d: any) => setJobs(prev => { const next = new Map(prev); for (const j of d.jobs || []) next.set(j.id, j); return next; }))
+      .catch(() => { loaded.current.delete(file); })
+      .finally(() => setPending(n => n - 1));
+  };
+
+  useEffect(() => {
+    fetch(DATA_BASE + 'index.json')
+      .then(r => { if (!r.ok) throw Error(); return r.json(); })
+      .then((i: any) => { setIndex(i as JobIndex); load('latest.json'); })
+      .catch(() => fetch(FEED_URL).then(r => r.json()).then((raw: any) => { const f = raw as Feed;
+        setIndex({updated: f.updated || '', total: f.jobs.length, onsite: 0, remote: 0, fields: [], provinces: [], sources: f.sources});
+        setJobs(new Map(f.jobs.map(j => [j.id, j])));
+      }).catch(() => setError(true)));
   }, []);
-  return {feed, feedError: error};
+
+  const hasShards = !!index?.fields.length;
+  useEffect(() => { if (hasShards && location) load('p-' + slugOf(provinceOf(location.lat, location.lon)) + '.json'); }, [hasShards, location?.lat, location?.lon]);
+  useEffect(() => { if (hasShards && mode === 'remote') load('remote.json'); }, [hasShards, mode]);
+  useEffect(() => { if (hasShards && category) load('c-' + slugOf(category) + '.json'); }, [hasShards, category]);
+  useEffect(() => {
+    if (!hasShards || (!wantAll && query.trim().length < 3)) return;
+    for (const f of index!.fields) if (f.count) load('c-' + f.slug + '.json');
+  }, [hasShards, wantAll, query.trim().length >= 3]);
+
+  const feed: Feed | null = index ? {updated: index.updated, sources: index.sources, jobs: [...jobs.values()]} : null;
+  return {feed, index, feedError: error, loadingMore: pending > 0, loadAll: () => setWantAll(true), allLoaded: wantAll || query.trim().length >= 3};
 }
 
 function useCommunityJobs(location: Location | null, radius: number, refresh: number) {
@@ -107,7 +139,7 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
   const [refresh, setRefresh] = useState(0);
   const [saved, setSaved] = useState(() => new Set(savedJobs().map(s => s.key)));
 
-  const {feed, feedError} = useFeed();
+  const {feed, index, feedError, loadingMore, loadAll, allLoaded} = useFeed({location, mode, category, query});
   const {community, communityLoading, communityError} = useCommunityJobs(location, radius, refresh);
 
   useEffect(() => writeStore('cw-radius-v2', radius), [radius]);
@@ -172,7 +204,7 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
       {welcome && (
         <section className="welcome">
           <div>
-            <p className="overline"><span className="live-dot"/> Jobs across all nine provinces</p>
+            <p className="overline"><span className="live-dot"/> {index?.total ? `${index.total.toLocaleString('en-ZA')} live jobs · updated ${ago(Date.parse(index.updated)).toLowerCase()}` : 'Jobs across all nine provinces'}</p>
             <h1>Good work,<br/>closer to <em>home.</em></h1>
             <p className="lede">Shifts from your community, in-person jobs across South Africa, and online work you can do from anywhere.</p>
           </div>
@@ -206,13 +238,20 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
         <div className="segmented" role="tablist" aria-label="Work type">
           {([['all', 'All jobs', BriefcaseBusiness], ['onsite', 'In person', MapPin], ['remote', 'Online', Globe]] as const).map(([m, label, Icon]) => (
             <button key={m} role="tab" aria-selected={mode === m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>
-              <Icon size={16}/>{label}<span className="seg-count">{loading ? '·' : counts[m]}</span>
+              <Icon size={16}/>{label}<span className="seg-count">{loading ? '·' : counts[m].toLocaleString('en-ZA')}</span>
             </button>
           ))}
         </div>
         <div className="chip-scroll" role="group" aria-label="Category">
           <button className={!category ? 'on' : ''} onClick={() => setCategory('')}>All types</button>
-          {browseCategories.map(c => <button key={c} className={category === c ? 'on' : ''} onClick={() => setCategory(category === c ? '' : c)}>{c}</button>)}
+          {[...browseCategories]
+            // Busiest fields first, and the chosen one right after "All types" so it stays in view
+            .sort((x, y) => (x === category ? -1 : y === category ? 1 : (index?.fields.find(f => f.name === y)?.count || 0) - (index?.fields.find(f => f.name === x)?.count || 0)))
+            .map(c => {
+            const n = index?.fields.find(f => f.name === c)?.count;
+            if (index?.fields.length && !n) return null;
+            return <button key={c} className={category === c ? 'on' : ''} onClick={() => setCategory(category === c ? '' : c)}>{c}{n ? <span className="chip-n">{n.toLocaleString('en-ZA')}</span> : null}</button>;
+          })}
         </div>
       </section>
 
@@ -238,7 +277,8 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
             <span>
               <strong>{loading ? 'Loading jobs…' : `${list.length.toLocaleString('en-ZA')} ${list.length === 1 ? 'job' : 'jobs'}`}</strong>
               {location && mode !== 'remote' && <span className="muted"> · {radius ? `within ${radius} km of ${area}` : `nearest to ${area}`}</span>}
-              {communityLoading && <LoaderCircle className="spin inline" size={14}/>}
+              {(communityLoading || loadingMore) && <LoaderCircle className="spin inline" size={14}/>}
+              {index && index.total > list.length && <span className="muted total-note">{index.total.toLocaleString('en-ZA')} live jobs across SA · updated {ago(Date.parse(index.updated)).toLowerCase()}</span>}
             </span>
             <label className="sort">
               <span className="hide-sm">Sort</span>
@@ -286,7 +326,13 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
                   </Fragment>
                 ))}
               </div>
-              {shown < list.length && <button className="btn btn-outline btn-block more" onClick={() => setShown(s => s + PAGE)}>Show more jobs</button>}
+              {shown < list.length
+                ? <button className="btn btn-outline btn-block more" onClick={() => setShown(s => s + PAGE)}>Show more jobs</button>
+                : index && !allLoaded && index.total > (feed?.jobs.length || 0) && (
+                  <button className="btn btn-outline btn-block more" disabled={loadingMore} onClick={loadAll}>
+                    {loadingMore ? <LoaderCircle className="spin" size={16}/> : null}Load all {index.total.toLocaleString('en-ZA')} jobs
+                  </button>
+                )}
             </>
           )}
 
