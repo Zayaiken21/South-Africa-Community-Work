@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {
   MapPin, Clock, Navigation, ArrowRight, ArrowLeft, Plus, Check, Bookmark, Search, ShieldCheck, Mail, Globe,
-  BriefcaseBusiness, House, Menu, Download, Info, CircleHelp, Lock, FileText, ArrowUpRight, X, Users, Laptop,
+  BriefcaseBusiness, House, Menu, Download, Info, CircleHelp, Lock, FileText, ArrowUpRight, X, Users, Laptop, FileUser,
 } from 'lucide-react';
 import JobsView, {LocationPicker, PostForm, Sheet, useAreaLocation} from './JobsView';
 import {API, money, savedJobs, setSavedJobs, toggleSaved, type CommunityJob, type SavedJob} from './catalog';
@@ -43,6 +43,7 @@ function App() {
           <a className={tab === 'jobs' || tab === 'home' ? 'on' : ''} href="find-work.html">Find work</a>
           <a className={tab === 'online' ? 'on' : ''} href="find-work.html?mode=remote">Online jobs</a>
           <a className={tab === 'saved' ? 'on' : ''} href="saved-jobs.html">Saved</a>
+          <a href="cv-builder.html">CV builder</a>
           <a href="how-it-works.html">How it works</a>
         </nav>
         <div className="top-actions">
@@ -70,7 +71,7 @@ function App() {
       <footer className="site-footer">
         <div><a className="brand small" href="index.html"><Logo/><span>community<b>work</b></span></a><p>Opportunity starts in your community.</p></div>
         <nav aria-label="Footer">
-          <a href="find-work.html">Find work</a><a href="find-work.html?mode=remote">Online jobs</a><a href="post-job.html">Post a job</a>
+          <a href="find-work.html">Find work</a><a href="find-work.html?mode=remote">Online jobs</a><a href="post-job.html">Post a job</a><a href="cv-builder.html">CV builder</a>
           <a href="how-it-works.html">How it works</a><a href="about.html">About</a><a href="help.html">Help</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a>
         </nav>
         <small>South Africa · All nine provinces</small>
@@ -88,6 +89,7 @@ function App() {
         <Sheet title="More" onClose={() => setMore(false)}>
           <div className="menu-list">
             {install && <button onClick={() => { setMore(false); install(); }}><Download size={20}/>Install the app</button>}
+            <a href="cv-builder.html"><FileUser size={20}/>Build your CV</a>
             <a href="how-it-works.html"><BriefcaseBusiness size={20}/>How it works</a>
             <a href="about.html"><Info size={20}/>About</a>
             <a href="help.html"><CircleHelp size={20}/>Help & safety</a>
@@ -204,6 +206,7 @@ function Detail() {
                 <h2>Contact {job.business}</h2>
                 <p className="contact-value">{job.contact}</p>
                 <p className="hint-box">Contacting the poster doesn’t book the shift. Agree on the work, pay, hours and exact address first.</p>
+                <a className="link" href="cv-builder.html"><FileUser size={15}/>No CV yet? Build one free</a>
                 <a className="link" href="help.html#safety">Tips for staying safe</a>
               </aside>
             </div>
@@ -263,6 +266,7 @@ function How() {
             <li><strong>Pick a distance and type of work.</strong> Closest jobs come first.</li>
             <li><strong>Compare pay, hours and place.</strong> Save the ones you like.</li>
             <li><strong>Make contact.</strong> Call the poster, or apply on the job site for listings from other boards.</li>
+            <li><strong>Need a CV?</strong> Use the free CV builder and download it as a PDF or Word file.</li>
           </ol>
           <a className="btn btn-primary" href="find-work.html">Find work <ArrowRight size={16}/></a>
         </section>
@@ -299,6 +303,7 @@ const faqs: [string, string][] = [
   ['How does the app find my area?', 'When you open it, the app asks your phone or browser for your location. If that’s blocked, slow or outside South Africa, it estimates your area from your network. You can always tap your area at the top to choose a city or search an address.'],
   ['My location isn’t working.', 'Allow location for this site or app in your phone settings, then tap “Use my current location”. Or just tap your city — that works without GPS.'],
   ['Where do the online and in-person jobs come from?', 'Besides community posts, listings come from public job boards such as Adzuna, Remotive, Jobicy and Himalayas. Tap Apply to open the original advert and apply there. Listings refresh several times a day.'],
+  ['How do I make a CV?', 'Open CV builder from the menu. Fill in your details, choose a template and colour, then download a PDF or Word file. Everything stays on your device, and you can export a save file to keep editing later.'],
   ['Why am I seeing no jobs?', 'Your filters may be too narrow. Choose “Anywhere in SA”, clear the category or search, and check the In person and Online tabs.'],
   ['How is distance calculated?', 'It’s the straight-line distance between your area and the workplace. Travel by road will be longer.'],
   ['How do hourly and total pay work?', 'Hourly pay is multiplied by the hours to estimate the shift total. Total-job pay is divided by the hours when filtering by hourly pay.'],
@@ -333,6 +338,8 @@ function Privacy() {
         <p>When you post a job, its title, description, poster name, city, province, workplace position, category, pay, hours, hiring radius, start time and contact details are stored and shown to workers in range. Only publish details you’re allowed to share.</p>
         <h2>Listings from other job boards</h2>
         <p>In-person and online listings come from public job boards (Adzuna, Remotive, Jobicy, Himalayas). When you tap Apply you leave this app, and that site’s own privacy policy applies.</p>
+        <h2>CV builder</h2>
+        <p>What you type into the CV builder stays in this browser on your device. Your PDF or Word file is created on your device too; nothing is uploaded.</p>
         <h2>Service providers</h2>
         <p>GitHub Pages hosts the app. A Cloudflare-backed service hosts the community jobs database. Place search and place names use Photon (Komoot) with OpenStreetMap data. These services receive the network information needed to work.</p>
         <h2>Your device data</h2>

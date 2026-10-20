@@ -51,19 +51,20 @@ await writeFile('manifest.webmanifest', JSON.stringify({
     {name: 'Online jobs', url: './find-work.html?mode=remote', icons: [{src: 'assets/icons/icon-192.png', sizes: '192x192'}]},
     {name: 'Post a job', url: './post-job.html', icons: [{src: 'assets/icons/icon-192.png', sizes: '192x192'}]},
     {name: 'Saved jobs', url: './saved-jobs.html', icons: [{src: 'assets/icons/icon-192.png', sizes: '192x192'}]},
+    {name: 'Build a CV', url: './cv-builder.html', icons: [{src: 'assets/icons/icon-192.png', sizes: '192x192'}]},
   ],
 }, null, 2) + '\n');
 
 // Service worker: app shell works offline; job data always tries the network first.
 await writeFile('sw.js', `const CACHE='cw-${hash}';
-const SHELL=['./','./index.html','./find-work.html','./post-job.html','./saved-jobs.html','./job.html','./offline.html','./assets/community-app.js?v=${hash}','./assets/community-app.css?v=${hash}','./assets/favicon.svg','./assets/icons/icon-192.png','./manifest.webmanifest'];
+const SHELL=['./','./index.html','./find-work.html','./post-job.html','./saved-jobs.html','./job.html','./offline.html','./cv-builder.html','./assets/community-app.js?v=${hash}','./assets/community-app.css?v=${hash}','./assets/favicon.svg','./assets/icons/icon-192.png','./manifest.webmanifest'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(n=>n!==CACHE).map(n=>caches.delete(n)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',e=>{
   const r=e.request,u=new URL(r.url);
   if(r.method!=='GET')return;
   if(u.origin!==location.origin){
-    if(u.hostname.endsWith('fonts.gstatic.com')||u.hostname.endsWith('fonts.googleapis.com'))e.respondWith(caches.open(CACHE).then(async c=>(await c.match(r))||fetch(r).then(res=>{c.put(r,res.clone());return res;})));
+    if(u.hostname.endsWith('fonts.gstatic.com')||u.hostname.endsWith('fonts.googleapis.com')||u.hostname==='cdnjs.cloudflare.com'||u.hostname==='cdn.jsdelivr.net')e.respondWith(caches.open(CACHE).then(async c=>(await c.match(r))||fetch(r).then(res=>{c.put(r,res.clone());return res;})));
     return;
   }
   if(r.mode==='navigate'){e.respondWith(fetch(r).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(async()=>(await caches.match(r,{ignoreSearch:true}))||caches.match('./offline.html')));return;}
@@ -73,6 +74,6 @@ self.addEventListener('fetch',e=>{
 `);
 
 await writeFile('.nojekyll', '');
-await writeFile('sitemap.xml', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + Object.keys(pages).filter(p => !hidden.includes(p)).map(p => '<url><loc>' + base + (p === 'index.html' ? '' : p) + '</loc></url>').join('') + '</urlset>');
+await writeFile('sitemap.xml', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + [...Object.keys(pages).filter(p => !hidden.includes(p)), 'cv-builder.html'].map(p => '<url><loc>' + base + (p === 'index.html' ? '' : p) + '</loc></url>').join('') + '</urlset>');
 try { await readFile('data/jobs-feed.json'); } catch { await writeFile('data/jobs-feed.json', '{"updated":null,"sources":[],"jobs":[]}\n'); }
 console.log(`Built ${Object.keys(pages).length} pages, app bundle (${hash}), manifest, service worker, favicon and sitemap.`);
