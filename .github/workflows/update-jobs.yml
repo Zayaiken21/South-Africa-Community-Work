@@ -7,11 +7,6 @@ on:
   schedule:
     - cron: '23 */3 * * *'
   workflow_dispatch:
-    inputs:
-      adzuna_calls:
-        description: 'Adzuna calls to use this run (0 = skip). Test plan: 25 in total. Paid plan: up to 500 a day.'
-        default: '0'
-        required: false
   push:
     branches: [main]
     paths:
@@ -49,10 +44,6 @@ jobs:
       - name: Fetch and merge jobs
         env:
           OUT_DIR: jobs-data/jobs
-          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
-          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
-          # Manual runs use the number typed in; scheduled runs use the ADZUNA_CALLS_PER_RUN repo variable (unset = off).
-          ADZUNA_CALLS_PER_RUN: ${{ github.event.inputs.adzuna_calls || vars.ADZUNA_CALLS_PER_RUN || '0' }}
           JOOBLE_API_KEY: ${{ secrets.JOOBLE_API_KEY }}
         run: node scripts/fetch-jobs.mjs
 
