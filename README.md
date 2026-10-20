@@ -2,6 +2,14 @@
 
 A mobile-friendly, full-stack local jobs platform for South African cities and towns.
 
+## Public frontend
+
+The public website is https://zayaiken21.github.io/South-Africa-Community-Work/ . Root HTML pages and `assets/` are prebuilt for GitHub Pages (main branch, repository root). `.nojekyll` prevents Jekyll from trying to compile the application source.
+
+Pages: Home, Find Work, Post a Job, Job Details, Saved Jobs, How It Works, About, Help, Privacy, Terms, and a 404 page. `frontend/` contains the browser application; run `pnpm build:pages` to regenerate all public HTML and assets after frontend edits.
+
+The frontend calls the hosted jobs API at https://south-africa-community-work.chummy-tuna-9459.chatgpt.site/api/jobs . This API uses the shared D1 database. CORS allows the GitHub Pages origin, including POST preflight. No privileged API keys or tokens are included in the browser bundle. Both frontend and backend deployments must be updated when API contracts change.
+
 ## First version
 - Location from browser GPS or a manually entered map coordinate, with free-text city/town names and all nine provinces.
 - Jobs within the worker's selected radius (1–200 km, default 25), ordered nearest first.
@@ -17,11 +25,11 @@ React / Vinext with Cloudflare Workers and D1. `app/api/jobs/route.ts` is the da
 Install dependencies with `pnpm install`, generate schema migrations with `pnpm db:generate`, typecheck with `pnpm exec tsc --noEmit`, and build with `pnpm build`. The repository retains the Sites build helpers and deployment configuration for reproducibility. A server runtime and D1 are required; GitHub Pages alone cannot run this API. GitHub changes do not automatically redeploy the hosted Site.
 
 ## Release scope
-This initial deployment is private for owner review. Public launch still needs user accounts, verified poster ownership, moderation and editing/removal, abuse controls, a privacy policy, and an operational employment/payment model. Do not treat browser coordinates as verified identity or anti-spoofing protection. The radius filter is a server-side distance rule using client-supplied coordinates; manual coordinates are deliberately supported. Mainland coordinate bounds are sanity checks rather than a national-boundary polygon. No GPS history is retained in the database. Job coordinates and public business contact details are returned only in matching listings.
+This early-access frontend is public. A fuller hiring platform still needs user accounts, verified poster ownership, moderation and editing/removal, abuse controls, a privacy policy, and an operational employment/payment model. Do not treat browser coordinates as verified identity or anti-spoofing protection. The radius filter is a server-side distance rule using client-supplied coordinates; manual coordinates are deliberately supported. Mainland coordinate bounds are sanity checks rather than a national-boundary polygon. No GPS history is retained in the database. Job coordinates and public business contact details are returned only in matching listings.
 
 Workers view details and contact the poster directly. There is no shift booking, application management, payroll, payment collection, penalty deduction or payment-provider integration in this version. Posted wages are advertised compensation, not a posting charge. Search distances are straight-line estimates, not route or transport estimates. Posting start times use South Africa Standard Time (UTC+02:00).
 
-The app does not claim any business partnerships or display fabricated listings. Private review metadata is deliberately noindex until public launch.
+The app does not claim any business partnerships or display fabricated listings. Public informational pages have canonical URLs, descriptions and a sitemap. Dynamic job and device-specific saved-job pages are noindex.
 
 ## Verification
 `node --experimental-strip-types --test tests/jobs.test.ts` checks distance calculations, both radius limits, edge cases and listing validation. TypeScript and a production build validate the application source. Browser visual QA was unavailable in the build environment.
