@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import JobsView, {LocationPicker, PostForm, Sheet, useAreaLocation} from './JobsView';
 import {API, money, savedJobs, setSavedJobs, toggleSaved, type CommunityJob, type SavedJob} from './catalog';
+import {AdSlot, HangingPromo, initAds} from './ads';
 import './app.css';
 
 const file = window.location.pathname.split('/').pop() || 'index.html';
@@ -26,6 +27,10 @@ function useInstall() {
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
 }
+
+// Ads stay off the posting form, CV builder, legal pages and offline page.
+const adFreePages = ['post-job.html', 'privacy.html', 'terms.html', 'offline.html', '404.html'];
+if (!adFreePages.includes(file)) initAds();
 
 // ---------- Shell ----------
 
@@ -77,6 +82,8 @@ function App() {
         <small>South Africa · All nine provinces</small>
       </footer>
 
+      {!adFreePages.includes(file) && <HangingPromo/>}
+
       <nav className="tabbar" aria-label="App">
         <a className={tab === 'home' || tab === 'jobs' ? 'on' : ''} href="index.html"><House size={22}/><span>Jobs</span></a>
         <a className={tab === 'online' ? 'on' : ''} href="find-work.html?mode=remote"><Globe size={22}/><span>Online</span></a>
@@ -103,7 +110,13 @@ function App() {
 }
 
 function Logo() {
-  return <span className="logo" aria-hidden><i/><i/><i/><i/></span>;
+  return (
+    <svg className="logo" viewBox="0 0 96 96" aria-hidden>
+      <path className="logo-pin" d="M48 93.5C45.8 93.5 13 61.5 13 40.5A35 35 0 1 1 83 40.5C83 61.5 50.2 93.5 48 93.5Z"/>
+      <rect className="t1" x="27.5" y="19.5" width="18" height="18" rx="5"/><rect className="t2" x="50.5" y="19.5" width="18" height="18" rx="5"/>
+      <rect className="t3" x="27.5" y="42.5" width="18" height="18" rx="5"/><rect className="t4" x="50.5" y="42.5" width="18" height="18" rx="5"/>
+    </svg>
+  );
 }
 
 function PageHead({tag, title, description}: {tag: string; title: string; description?: string}) {
@@ -197,6 +210,7 @@ function Detail() {
                 </div>
                 <h3>About this job</h3>
                 <p className="prose-text">{job.description}</p>
+                <AdSlot kind="article" seed={2}/>
                 <h3>When</h3>
                 <p className="prose-text">{new Date(job.start).toLocaleString('en-ZA', {timeZone: 'Africa/Johannesburg', dateStyle: 'full', timeStyle: 'short'})} SAST</p>
                 <button className={'btn ' + (saved ? 'btn-dark' : 'btn-outline')} onClick={save}><Bookmark size={16} fill={saved ? 'currentColor' : 'none'}/>{saved ? 'Saved' : 'Save job'}</button>
@@ -208,6 +222,7 @@ function Detail() {
                 <p className="hint-box">Contacting the poster doesn’t book the shift. Agree on the work, pay, hours and exact address first.</p>
                 <a className="link" href="cv-builder.html"><FileUser size={15}/>No CV yet? Build one free</a>
                 <a className="link" href="help.html#safety">Tips for staying safe</a>
+                <AdSlot kind="sidebar" seed={3}/>
               </aside>
             </div>
           </>
@@ -257,6 +272,7 @@ function How() {
         <div className="feature"><MapPin size={22}/><h3>In person across SA</h3><p>Jobs from employers around the country, sorted by how close they are to you.</p></div>
         <div className="feature"><Laptop size={22}/><h3>Online jobs</h3><p>Remote roles open to people in South Africa. Apply on the original job site.</p></div>
       </div>
+      <AdSlot kind="article" seed={0}/>
       <div className="split even">
         <section className="card-panel">
           <Search size={22}/>
@@ -316,6 +332,7 @@ function Help() {
     <div className="page reading">
       <PageHead tag="Help & safety" title="A little help along the way."/>
       {faqs.map(([q, a]) => <details className="faq" key={q}><summary>{q}</summary><p>{a}</p></details>)}
+      <AdSlot kind="article" seed={1}/>
       <section className="card-panel" id="safety">
         <ShieldCheck size={22}/>
         <h2>Before you agree to work</h2>
@@ -340,6 +357,8 @@ function Privacy() {
         <p>In-person and online listings come from public job boards (Adzuna, Remotive, Jobicy, Himalayas). When you tap Apply you leave this app, and that site’s own privacy policy applies.</p>
         <h2>CV builder</h2>
         <p>What you type into the CV builder stays in this browser on your device. Your PDF or Word file is created on your device too; nothing is uploaded.</p>
+        <h2>Advertising</h2>
+        <p>Community Work is free because of advertising. We use Google AdSense, which may use cookies and your device’s advertising ID to show ads, including ads based on your interests, and to measure them. Google and its partners act on their own privacy policies; see <a className="link" href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noreferrer">how Google uses information from sites that use its services</a>. You can turn off personalised ads at <a className="link" href="https://adssettings.google.com" target="_blank" rel="noreferrer">Google’s Ad Settings</a>. Ads are labelled “Advertisement”; our own promotions are labelled “From Community Work”.</p>
         <h2>Service providers</h2>
         <p>GitHub Pages hosts the app. A Cloudflare-backed service hosts the community jobs database. Place search and place names use Photon (Komoot) with OpenStreetMap data. These services receive the network information needed to work.</p>
         <h2>Your device data</h2>

@@ -1,0 +1,11 @@
+{
+  "enabled": false,
+  "client": "",
+  "slots": {
+    "feed": "",
+    "sidebar": "",
+    "article": ""
+  },
+  "feedLayoutKey": "",
+  "houseAds": true
+}

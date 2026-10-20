@@ -6,6 +6,8 @@ import {
 import {provinces, categories as postCategories} from '../lib/jobs';
 import {LocationPicker} from './LocationPicker';
 import {autoLocate} from './location';
+import {AdSlot} from './ads';
+import {Fragment} from 'react';
 import {
   API, FEED_URL, browseCategories, money, ago, when, distanceKm, readStore, writeStore, savedJobs, toggleSaved,
   type Location, type CommunityJob, type Feed, type Listing,
@@ -275,7 +277,13 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
           ) : (
             <>
               <div className="job-list">
-                {list.slice(0, shown).map(l => <JobCard key={l.key} job={l} saved={saved.has(l.key)} onSave={() => save(l)}/>)}
+                {list.slice(0, shown).map((l, i) => (
+                  <Fragment key={l.key}>
+                    <JobCard job={l} saved={saved.has(l.key)} onSave={() => save(l)}/>
+                    {/* One ad after the 4th job, then every 8 jobs — never above the first results */}
+                    {(i === 3 || (i > 3 && (i - 3) % 8 === 0)) && i < list.length - 1 && <AdSlot kind="feed" seed={i}/>}
+                  </Fragment>
+                ))}
               </div>
               {shown < list.length && <button className="btn btn-outline btn-block more" onClick={() => setShown(s => s + PAGE)}>Show more jobs</button>}
             </>
@@ -303,6 +311,7 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
             <p>Fill in your details and download a polished CV as PDF or Word.</p>
             <span className="link">Open CV builder <ArrowRight size={15}/></span>
           </a>
+          <AdSlot kind="sidebar" seed={2}/>
           <div className="side-card dark">
             <span className="overline">For local businesses</span>
             <h3>Need hands on deck?</h3>
