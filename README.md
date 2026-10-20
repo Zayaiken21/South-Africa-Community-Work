@@ -10,6 +10,15 @@ Pages: Home, Find Work, Post a Job, Job Details, Saved Jobs, How It Works, About
 
 The frontend calls the hosted jobs API at https://south-africa-community-work.chummy-tuna-9459.chatgpt.site/api/jobs . This API uses the shared D1 database. CORS allows the GitHub Pages origin, including POST preflight. No privileged API keys or tokens are included in the browser bundle. Both frontend and backend deployments must be updated when API contracts change.
 
+## App, location and job feeds (October 2026)
+
+- **Installable app.** `manifest.webmanifest`, `sw.js` (offline shell) and `assets/icons/` make the site a PWA. On phones it uses a bottom tab bar and bottom sheets, and follows the system light/dark theme. See `PLAY_STORE.md` to publish it on Google Play as a Trusted Web Activity.
+- **Automatic location.** On first open the app asks for GPS (low-accuracy, fast). If it’s blocked, slow or outside South Africa, it estimates the area from the network (GeoJS, then ipapi) and labels it approximate. People can also tap one of 14 cities or search an address (Photon). Code: `frontend/location.ts`, `frontend/LocationPicker.tsx`.
+- **Online and in-person jobs.** `scripts/fetch-jobs-feed.mjs` builds `data/jobs-feed.json` from Adzuna (in-person South African jobs), Remotive, Jobicy and Himalayas (remote jobs open to South Africa). `.github/workflows/refresh-jobs.yml` runs it every 6 hours and commits the result, which redeploys Pages. Listings link to the original advert with source attribution.
+  - Adzuna needs a free key: register at https://developer.adzuna.com, then add `ADZUNA_APP_ID` and `ADZUNA_APP_KEY` under **Settings → Secrets and variables → Actions**. Without it, only community posts and online jobs appear.
+  - Run it manually from **Actions → Refresh job listings → Run workflow**.
+- Community posts still come from the D1 API and appear first, marked “Community post”.
+
 ## First version
 - Location from browser GPS or a manually entered map coordinate, with free-text city/town names and all nine provinces.
 - Jobs within the worker's selected radius (1–200 km, default 25), ordered nearest first.
