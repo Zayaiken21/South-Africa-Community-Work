@@ -281,7 +281,8 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
                   <Fragment key={l.key}>
                     <JobCard job={l} saved={saved.has(l.key)} onSave={() => save(l)}/>
                     {/* One ad after the 4th job, then every 8 jobs — never above the first results */}
-                    {(i === 3 || (i > 3 && (i - 3) % 8 === 0)) && i < list.length - 1 && <AdSlot kind="feed" seed={i}/>}
+                    {/* Sponsored spot after the 5th job, then every 10 — matched to the job just above it */}
+                    {i >= 4 && (i - 4) % 10 === 0 && i < list.length - 1 && <AdSlot spot="feed" index={(i - 4) / 10} category={l.category} mode={l.mode}/>}
                   </Fragment>
                 ))}
               </div>
@@ -305,13 +306,13 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
             <button className="btn btn-outline btn-sm" onClick={() => setSheet('location')}>{location ? 'Change area' : 'Set area'}</button>
             <small>Distances are straight-line estimates. Check your route before agreeing to work.</small>
           </div>
+          <AdSlot spot="sidebar" index={0} mode={mode === 'all' ? undefined : mode}/>
           <a className="side-card cv" href="cv-builder.html">
             <FileUser size={20}/>
             <h3>Build your CV</h3>
             <p>Fill in your details and download a polished CV as PDF or Word.</p>
             <span className="link">Open CV builder <ArrowRight size={15}/></span>
           </a>
-          <AdSlot kind="sidebar" seed={2}/>
           <div className="side-card dark">
             <span className="overline">For local businesses</span>
             <h3>Need hands on deck?</h3>

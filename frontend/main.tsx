@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import JobsView, {LocationPicker, PostForm, Sheet, useAreaLocation} from './JobsView';
 import {API, money, savedJobs, setSavedJobs, toggleSaved, type CommunityJob, type SavedJob} from './catalog';
-import {AdSlot, HangingPromo, initAds} from './ads';
+import {AdSlot, HangingOffer, initAds} from './ads';
 import './app.css';
 
 const file = window.location.pathname.split('/').pop() || 'index.html';
@@ -79,10 +79,10 @@ function App() {
           <a href="find-work.html">Find work</a><a href="find-work.html?mode=remote">Online jobs</a><a href="post-job.html">Post a job</a><a href="cv-builder.html">CV builder</a>
           <a href="how-it-works.html">How it works</a><a href="about.html">About</a><a href="help.html">Help</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a>
         </nav>
-        <small>South Africa · All nine provinces</small>
+        <small>South Africa · All nine provinces · Some links are sponsored or affiliate links: we may earn a commission, at no cost to you.</small>
       </footer>
 
-      {!adFreePages.includes(file) && <HangingPromo/>}
+      {!adFreePages.includes(file) && <HangingOffer/>}
 
       <nav className="tabbar" aria-label="App">
         <a className={tab === 'home' || tab === 'jobs' ? 'on' : ''} href="index.html"><House size={22}/><span>Jobs</span></a>
@@ -210,7 +210,7 @@ function Detail() {
                 </div>
                 <h3>About this job</h3>
                 <p className="prose-text">{job.description}</p>
-                <AdSlot kind="article" seed={2}/>
+                <AdSlot spot="article" index={0} category={job.category} mode="onsite"/>
                 <h3>When</h3>
                 <p className="prose-text">{new Date(job.start).toLocaleString('en-ZA', {timeZone: 'Africa/Johannesburg', dateStyle: 'full', timeStyle: 'short'})} SAST</p>
                 <button className={'btn ' + (saved ? 'btn-dark' : 'btn-outline')} onClick={save}><Bookmark size={16} fill={saved ? 'currentColor' : 'none'}/>{saved ? 'Saved' : 'Save job'}</button>
@@ -222,7 +222,6 @@ function Detail() {
                 <p className="hint-box">Contacting the poster doesn’t book the shift. Agree on the work, pay, hours and exact address first.</p>
                 <a className="link" href="cv-builder.html"><FileUser size={15}/>No CV yet? Build one free</a>
                 <a className="link" href="help.html#safety">Tips for staying safe</a>
-                <AdSlot kind="sidebar" seed={3}/>
               </aside>
             </div>
           </>
@@ -272,7 +271,7 @@ function How() {
         <div className="feature"><MapPin size={22}/><h3>In person across SA</h3><p>Jobs from employers around the country, sorted by how close they are to you.</p></div>
         <div className="feature"><Laptop size={22}/><h3>Online jobs</h3><p>Remote roles open to people in South Africa. Apply on the original job site.</p></div>
       </div>
-      <AdSlot kind="article" seed={0}/>
+      <AdSlot spot="article"/>
       <div className="split even">
         <section className="card-panel">
           <Search size={22}/>
@@ -332,7 +331,7 @@ function Help() {
     <div className="page reading">
       <PageHead tag="Help & safety" title="A little help along the way."/>
       {faqs.map(([q, a]) => <details className="faq" key={q}><summary>{q}</summary><p>{a}</p></details>)}
-      <AdSlot kind="article" seed={1}/>
+      <AdSlot spot="article"/>
       <section className="card-panel" id="safety">
         <ShieldCheck size={22}/>
         <h2>Before you agree to work</h2>
@@ -358,7 +357,9 @@ function Privacy() {
         <h2>CV builder</h2>
         <p>What you type into the CV builder stays in this browser on your device. Your PDF or Word file is created on your device too; nothing is uploaded.</p>
         <h2>Advertising</h2>
-        <p>Community Work is free because of advertising. We use Google AdSense, which may use cookies and your device’s advertising ID to show ads, including ads based on your interests, and to measure them. Google and its partners act on their own privacy policies; see <a className="link" href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noreferrer">how Google uses information from sites that use its services</a>. You can turn off personalised ads at <a className="link" href="https://adssettings.google.com" target="_blank" rel="noreferrer">Google’s Ad Settings</a>. Ads are labelled “Advertisement”; our own promotions are labelled “From Community Work”.</p>
+        <p>Community Work is free because of advertising. We use Google AdSense, which may use cookies and your device’s advertising ID to show ads, including ads based on your interests, and to measure them. Google and its partners act on their own privacy policies; see <a className="link" href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noreferrer">how Google uses information from sites that use its services</a>. You can turn off personalised ads at <a className="link" href="https://adssettings.google.com" target="_blank" rel="noreferrer">Google’s Ad Settings</a>. Google ads are labelled “Advertisement”.</p>
+        <h2>Sponsored and affiliate links</h2>
+        <p>Cards and bars labelled “Sponsored” link to partners who may pay us a commission when you view, click or sign up. Their sites have their own privacy policies and may use cookies to track the referral. We don’t share your saved jobs or CV with them.</p>
         <h2>Service providers</h2>
         <p>GitHub Pages hosts the app. A Cloudflare-backed service hosts the community jobs database. Place search and place names use Photon (Komoot) with OpenStreetMap data. These services receive the network information needed to work.</p>
         <h2>Your device data</h2>
@@ -384,6 +385,8 @@ function Terms() {
         <p>Post only genuine jobs you’re allowed to advertise, with honest duties, pay, hours and location. No misleading, unlawful, discriminatory or abusive content, and no one else’s private information.</p>
         <h2>Location and availability</h2>
         <p>Distances use supplied coordinates and don’t guarantee travel time or identity. Jobs can be filled or change before a listing is updated.</p>
+        <h2>Sponsored content</h2>
+        <p>Some cards and links are sponsored or affiliate links, always labelled “Sponsored”. We may earn a commission from them. We don’t endorse or guarantee partners’ products; check them before you buy or sign up.</p>
         <h2>Payments and disputes</h2>
         <p>This app doesn’t collect payments, hold funds or pay wages. Confirm payment terms directly. Employers remain responsible for their employment obligations.</p>
       </section>

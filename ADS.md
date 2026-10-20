@@ -1,20 +1,65 @@
-# Ads: setup and getting paid
+# Making money: affiliate offers and Google ads
 
-The app already has ad spots built in. Until you connect Google AdSense they show Community Work promos (CV builder, post a job, online jobs, install the app), labelled “From Community Work”. Once AdSense is connected, the same spots show paid ads labelled “Advertisement”.
+The app has money spots on every main page. Each spot shows, in this order:
 
-## Where ads appear
+1. **Your affiliate offer** from `affiliates.json` — you earn per click, sign-up or sale (or per view, if your network gives you a view pixel).
+2. **A Google AdSense ad** from `ads-config.json` — Google pays per 1,000 views and per click.
+3. **Nothing** — empty spots disappear. There are no filler promos.
+
+When both are set up, spots alternate between your offers and Google ads so you earn from both.
+
+## Where the spots are
 
 | Spot | Where | Phone | Computer |
 | --- | --- | --- | --- |
-| **In-feed** (between content) | After the 4th job, then every 8 jobs | ✔ | ✔ |
-| **In-article** (between text) | Job details (between description and start time), How it works, Help | ✔ | ✔ |
-| **Sidebar** | Jobs sidebar, job details contact panel | — | ✔ |
-| **Hanging / anchor** | Google’s anchor bar (paid). Before approval: a dismissible “No CV yet?” bar above the tab bar | ✔ | ✔ |
-| **Side rails** | Google’s side rail ads in the empty margins of wide screens | — | ✔ |
+| **In the feed** | After the 5th job, then every 10 jobs. Looks like a job card, labelled “Sponsored”. Picks the offer that best matches the job above it (category, in-person or online). | ✔ | ✔ |
+| **Between text** | Job details (between the description and the start time), How it works, Help | ✔ | ✔ |
+| **Sidebar** | Jobs sidebar, under “Your area” | — | ✔ |
+| **Hanging bar** | Slides up above the tab bar after scrolling; closable, stays closed 3 days. Only when Google ads are off (then Google’s anchor ad takes its place). | ✔ | — |
 
-No ads on: Post a job, CV builder, Privacy, Terms, offline page. No pop-ups or full-screen ads. The first 4 results are never interrupted.
+No spots on Post a job, the CV builder, Privacy, Terms or the offline page. No pop-ups. Every spot says “Sponsored” or “Advertisement”, links carry `rel="sponsored"` (Google’s rule for paid links), and the footer, Privacy and Terms pages disclose affiliate commissions.
 
-**Video ads:** AdSense ad units now serve all ad types, so the in-feed, in-article and sidebar spots can show video ads automatically. True “before the video” ads (in-stream) need your own videos and Google Ad Manager; add that later if you publish video content.
+**See it before you go live:** add `?adpreview=1` to any page, e.g. `https://zayaiken21.github.io/South-Africa-Community-Work/find-work.html?adpreview=1`. The five sample offers show, marked “Sample”.
+
+## Affiliate offers — affiliates.json
+
+Edit it on GitHub (pencil icon) — no rebuild needed. One block per offer:
+
+```json
+{
+  "id": "coursera-excel",
+  "partner": "Coursera",
+  "title": "Learn Excel in two weeks",
+  "text": "Short online course with a certificate you can add to your CV.",
+  "badge": "Certificate included",
+  "cta": "See course",
+  "url": "https://YOUR-AFFILIATE-TRACKING-LINK",
+  "logo": "https://…/logo.png",
+  "spots": ["feed", "article", "sidebar"],
+  "categories": ["Admin & office", "Finance"],
+  "modes": ["remote"],
+  "weight": 2,
+  "impressionUrl": "https://…/view-pixel",
+  "start": "2026-11-01", "end": "2026-12-31"
+}
+```
+
+- **url** — your tracking link from the affiliate network. This is how you get credited for clicks and sales.
+- **spots** — any of `feed`, `article`, `sidebar`, `hanging`. Leave out for all except `hanging`.
+- **categories** — job types it suits (`Hospitality`, `Retail`, `Cleaning`, `Warehouse & logistics`, `Driving & delivery`, `Construction`, `Events`, `Admin & office`, `Customer service`, `Sales & marketing`, `Tech & IT`, `Healthcare`, `Education`, `Finance`, `Other`). Matching offers show beside matching jobs.
+- **modes** — `onsite` (in person) or `remote` (online). Leave out for both.
+- **weight** — higher shows more often.
+- **impressionUrl** — for pay-per-view deals: the network’s view pixel. It fires once when half the card is on screen.
+- **start / end** — run a deal for a set time.
+- To go live, delete the sample offers (or remove `"sample": true` and swap in your links).
+
+### What fits a jobs app
+
+Offers that help people get hired convert best: online courses and certificates, CV and interview help, freelance marketplaces (for the Online tab), driving lessons (for delivery jobs), workwear and safety boots (for warehouse and building jobs), data bundles and phones, and bank accounts for a first payslip. Coursera, Udemy and Fiverr all run affiliate programs; check each one accepts South African sites before you apply.
+
+Never promote paid “job placement” fees or get-rich-quick schemes — they hurt trust and break Google’s rules.
+
+# Google AdSense (optional, runs alongside offers)
 
 ## 1. Apply for AdSense
 
@@ -54,8 +99,7 @@ Edit `ads-config.json` in the repo (you can do it on github.com with the pencil 
   "enabled": true,
   "client": "ca-pub-1234567890123456",
   "slots": { "feed": "1111111111", "sidebar": "2222222222", "article": "3333333333" },
-  "feedLayoutKey": "-6t+ed+2i-1n-4w",
-  "houseAds": true
+  "feedLayoutKey": "-6t+ed+2i-1n-4w"
 }
 ```
 
