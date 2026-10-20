@@ -14,8 +14,10 @@ const C = {green: '#176B4E', greenDeep: '#0F5A40', lime: '#A9C479', sand: '#D6DD
 // ---- Mark ----
 const PIN = 'M48 93.5C45.8 93.5 13 61.5 13 40.5A35 35 0 1 1 83 40.5C83 61.5 50.2 93.5 48 93.5Z';
 const tiles = [[27.5, 19.5], [50.5, 19.5], [27.5, 42.5], [50.5, 42.5]];
-function mark({pin = C.green, t = [C.white, C.lime, C.sand, C.white]} = {}) {
-  return `<path d="${PIN}" fill="${pin}"/>` + tiles.map(([x, y], i) => `<rect x="${x}" y="${y}" width="18" height="18" rx="5" fill="${t[i]}"/>`).join('');
+let markId = 0;
+function mark(_options = {}) {
+  const id = 'sa' + (++markId);
+  return `<path d="M48 93.5C45.8 93.5 13 61.5 13 40.5A35 35 0 1 1 83 40.5C83 61.5 50.2 93.5 48 93.5Z" fill="#007A4D"/><defs><clipPath id="${id}"><circle cx="48" cy="40" r="28"/></clipPath></defs><g clip-path="url(#${id})"><path d="M20 12H76V40H20Z" fill="#DE3831"/><path d="M20 40H76V68H20Z" fill="#002395"/><path d="M17 10L51 40L17 70M49 40H80" fill="none" stroke="#FFFFFF" stroke-width="23"/><path d="M17 10L51 40L17 70M49 40H80" fill="none" stroke="#007A4D" stroke-width="15"/><path d="M16 18L41 40L16 62Z" fill="#FFB612"/><path d="M16 26L32 40L16 54Z" fill="#141414"/></g><circle cx="48" cy="40" r="28" fill="none" stroke="#FFFFFF" stroke-width="2"/>`;
 }
 const markOn = (x, y, size, opt) => `<g transform="translate(${x} ${y}) scale(${size / 96})">${mark(opt)}</g>`;
 const svg = (w, h, body, bg) => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${bg ? `<rect width="${w}" height="${h}" fill="${bg}"/>` : ''}${body}</svg>`;

@@ -110,13 +110,7 @@ function App() {
 }
 
 function Logo() {
-  return (
-    <svg className="logo" viewBox="0 0 96 96" aria-hidden>
-      <path className="logo-pin" d="M48 93.5C45.8 93.5 13 61.5 13 40.5A35 35 0 1 1 83 40.5C83 61.5 50.2 93.5 48 93.5Z"/>
-      <rect className="t1" x="27.5" y="19.5" width="18" height="18" rx="5"/><rect className="t2" x="50.5" y="19.5" width="18" height="18" rx="5"/>
-      <rect className="t3" x="27.5" y="42.5" width="18" height="18" rx="5"/><rect className="t4" x="50.5" y="42.5" width="18" height="18" rx="5"/>
-    </svg>
-  );
+  return <img className="logo" src="./assets/favicon.svg?v=sa-2026" width="36" height="36" alt="" aria-hidden="true"/>;
 }
 
 function PageHead({tag, title, description}: {tag: string; title: string; description?: string}) {
