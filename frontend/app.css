@@ -152,6 +152,8 @@ svg { flex-shrink: 0; }
 .chip-scroll button, .chip-wrap button, .city-chips button { flex: none; min-height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); font-size: 14px; font-weight: 550; color: var(--ink-2); scroll-snap-align: start; }
 .chip-scroll button.on, .chip-wrap button.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
 .chip-wrap, .city-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-n { margin-left: 6px; font-size: 12px; font-weight: 600; opacity: .65; }
+.total-note { display: block; font-size: 13px; margin-top: 2px; }
 .city-chips button:hover { border-color: var(--green); color: var(--green); }
 
 /* ---------- Feed ---------- */

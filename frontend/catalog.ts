@@ -2,7 +2,16 @@
 // The posting form still uses `categories` from lib/jobs.ts, because the hosted API validates against that list.
 
 export const API = 'https://south-africa-community-work.chummy-tuna-9459.chatgpt.site/api/jobs';
-export const FEED_URL = './data/jobs-feed.json';
+export const FEED_URL = './data/jobs-feed.json'; // old single-file feed, used only if the job data branch can't be reached
+// Job data published every 3 hours by .github/workflows/update-jobs.yml
+export const DATA_BASE = 'https://raw.githubusercontent.com/Zayaiken21/South-Africa-Community-Work/jobs-data/jobs/';
+
+export type JobIndex = {
+  updated: string; total: number; onsite: number; remote: number;
+  fields: {name: string; slug: string; count: number}[];
+  provinces: {name: string; slug: string; count: number}[];
+  sources: {name: string; url: string; count: number}[];
+};
 
 export type Location = {lat: number; lon: number; label: string; approx?: boolean; source?: 'gps' | 'ip' | 'search' | 'city'};
 
@@ -28,9 +37,28 @@ export type Listing = {
 };
 
 export const browseCategories = [
-  'Hospitality', 'Retail', 'Cleaning', 'Warehouse & logistics', 'Driving & delivery', 'Construction', 'Events',
-  'Admin & office', 'Customer service', 'Sales & marketing', 'Tech & IT', 'Healthcare', 'Education', 'Finance', 'Other',
+  'Tech & IT', 'Admin & office', 'Customer service', 'Sales & marketing', 'Finance', 'Healthcare', 'Education', 'Engineering',
+  'Retail', 'Hospitality', 'Warehouse & logistics', 'Driving & delivery', 'Construction', 'Manufacturing', 'Mining', 'Agriculture',
+  'Security', 'Cleaning', 'Creative & design', 'HR & recruitment', 'Legal', 'Events', 'Other',
 ];
+
+// Rough province lookup for a chosen location (nearest known city or province centre).
+const provincePoints: [string, number, number][] = [
+  ['Gauteng', -26.2041, 28.0473], ['Gauteng', -25.7479, 28.2293], ['Western Cape', -33.9249, 18.4241], ['Western Cape', -33.963, 22.4617],
+  ['KwaZulu-Natal', -29.8587, 31.0218], ['KwaZulu-Natal', -29.6006, 30.3794], ['KwaZulu-Natal', -28.783, 32.0377], ['KwaZulu-Natal', -27.7576, 29.9318],
+  ['Eastern Cape', -33.9608, 25.6022], ['Eastern Cape', -33.0153, 27.9116], ['Eastern Cape', -31.5889, 28.7844],
+  ['Free State', -29.0852, 26.1596], ['Free State', -27.9774, 26.7351], ['Free State', -28.2308, 28.3071],
+  ['Limpopo', -23.9045, 29.4689], ['Limpopo', -22.9456, 30.485], ['Limpopo', -23.6719, 27.7426],
+  ['Mpumalanga', -25.4753, 30.9694], ['Mpumalanga', -25.8713, 29.2332], ['Mpumalanga', -26.5167, 29.2],
+  ['North West', -25.6676, 27.2421], ['North West', -25.8653, 25.6442], ['North West', -26.7145, 27.097],
+  ['Northern Cape', -28.7282, 24.7499], ['Northern Cape', -28.4478, 21.2561], ['Northern Cape', -29.6643, 17.8865],
+];
+export function provinceOf(lat: number, lon: number) {
+  let best = provincePoints[0], d = Infinity;
+  for (const p of provincePoints) { const x = (p[1] - lat) ** 2 + ((p[2] - lon) * Math.cos(lat * Math.PI / 180)) ** 2; if (x < d) { d = x; best = p; } }
+  return best[0];
+}
+export const slugOf = (s: string) => s.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // Quick picks so nobody is stuck if GPS or place search fails.
 export const cities: Location[] = [
