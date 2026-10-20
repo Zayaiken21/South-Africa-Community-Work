@@ -1,39 +1,501 @@
-'use client';
-import {useEffect,useRef,useState} from 'react';
-import {MapPin,ArrowUpRight,ArrowRight,Search,SlidersHorizontal,Plus,LocateFixed,X,Clock,BriefcaseBusiness,Check,ChevronDown,Navigation,Users,ShieldCheck,LoaderCircle,Building2} from 'lucide-react';
+import {useEffect, useMemo, useRef, useState} from 'react';
+import {
+  MapPin, Search, SlidersHorizontal, LoaderCircle, Navigation, Bookmark, ArrowUpRight, Globe, X, Check, Plus,
+  BriefcaseBusiness, ChevronDown, LocateFixed, RefreshCw, Users, Laptop, Building2,
+} from 'lucide-react';
+import {provinces, categories as postCategories} from '../lib/jobs';
 import {LocationPicker} from './LocationPicker';
+import {autoLocate} from './location';
+import {
+  API, FEED_URL, browseCategories, money, ago, when, distanceKm, readStore, writeStore, savedJobs, toggleSaved,
+  type Location, type CommunityJob, type Feed, type Listing,
+} from './catalog';
 export {LocationPicker} from './LocationPicker';
-import {provinces,categories,validLocation} from '../lib/jobs';
-type Location = {lat:number;lon:number;label:string};
-type Job = {id:string;title:string;description:string;business:string;city:string;province:string;category:string;pay:number;payType:string;hours:number;radius:number;start:string;contact:string;distance:number;hourly:number};
-const money = (v:number)=>new Intl.NumberFormat('en-ZA',{style:'currency',currency:'ZAR',maximumFractionDigits:2}).format(v);
-const when = (v:string)=>new Date(v).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
-export default function Page(){
- const [location,setLocation]=useState<Location|null>(null),[locationOpen,setLocationOpen]=useState(false),[filterOpen,setFilterOpen]=useState(false),[postOpen,setPostOpen]=useState(false),[detail,setDetail]=useState<Job|null>(null);
- const [radius,setRadius]=useState(25),[category,setCategory]=useState(''),[minPay,setMinPay]=useState(''),[sort,setSort]=useState('distance'),[query,setQuery]=useState('');
- const [jobs,setJobs]=useState<Job[]>([]),[loading,setLoading]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[refresh,setRefresh]=useState(0);
- useEffect(()=>{try {const saved=JSON.parse(localStorage.getItem('cw-location')||'null');if(saved&&validLocation(saved.lat,saved.lon))setLocation(saved);}catch{}},[]);
- const saveLocation=(l:Location)=>{setLocation(l);try{localStorage.setItem('cw-location',JSON.stringify(l));}catch{}setLocationOpen(false);};
- useEffect(()=>{if(!location)return;const ctrl=new AbortController();const timer=setTimeout(async()=>{setLoading(true);setError('');try{const p=new URLSearchParams({lat:String(location.lat),lon:String(location.lon),radius:String(radius),category,minPay:minPay||'0',sort,q:query});const r=await fetch('https://south-africa-community-work.chummy-tuna-9459.chatgpt.site/api/jobs?'+p,{signal:ctrl.signal});const data:any=await r.json();if(!r.ok)throw Error(data.error);setJobs(data.jobs);}catch(e){if(!ctrl.signal.aborted){setError(e instanceof Error?e.message:'Unable to load jobs');setJobs([]);}}finally{if(!ctrl.signal.aborted)setLoading(false);}},200);return()=>{clearTimeout(timer);ctrl.abort();};},[location,radius,category,minPay,sort,query,refresh]);
- useEffect(()=>{try{localStorage.setItem('cw-radius',String(radius));}catch{}},[radius]);
- const filters=(category?1:0)+(minPay?1:0)+(radius!==25?1:0);
- return <><header className="header"><a className="brand" href="/" aria-label="Community Work home"><span className="brand-symbol"><span/><span/><span/><span/></span><span>community<span className="brand-light">work</span><small>SOUTH AFRICA</small></span></a><nav><a className="active" href="#jobs">Find work</a><button onClick={()=>{window.location.href='post-job.html';}}>Hire locally</button><a href="#how">How it works</a></nav><button className="button dark header-post" onClick={()=>{window.location.href='post-job.html';}}><Plus size={17}/> Post a job</button></header>
- <main><section className="hero"><div className="hero-copy"><div className="eyebrow"><span className="status-dot"/> LOCAL OPPORTUNITY. NATIONAL REACH.</div><h1>Good work.<br/>Closer to <span>home.</span></h1><p>Find your next shift around the corner.<br className="desktop"/> Connect with businesses and people in your community.</p><div className="hero-actions"><button className="button green" onClick={()=>location?document.getElementById('jobs')?.scrollIntoView({behavior:'smooth'}):setLocationOpen(true)}>Find work near me <ArrowUpRight size={19}/></button><button className="text-button" onClick={()=>{window.location.href='post-job.html';}}>Looking to hire? <ArrowRight size={17}/></button></div><div className="hero-foot"><span><Check size={15}/> All 9 provinces</span><span><Check size={15}/> Clear pay & hours</span><span><Check size={15}/> Local first</span></div></div>
- <div className="hero-art" aria-label="Illustration of work opportunities close to your location"><div className="map-grid"/><div className="map-road road-one"/><div className="map-road road-two"/><div className="radius-ring ring-one"/><div className="radius-ring ring-two"/><div className="center-pin"><MapPin size={28}/></div><div className="map-label">Your community</div><div className="map-card card-one"><span className="map-icon peach"><BriefcaseBusiness size={21}/></span><div>Work around you<small>Less travel. More possibility.</small></div><span className="tiny-dot"/></div><div className="map-card card-two"><span className="map-icon mint"><Users size={21}/></span><div>Hire in your area<small>Build a local team.</small></div></div><span className="small-pin pin-one"><Building2 size={18}/></span><span className="small-pin pin-two"><BriefcaseBusiness size={18}/></span><div className="map-bottom"><span className="status-dot"/> Made for every South African city <ArrowUpRight size={15}/></div></div></section>
- <section id="jobs" className="job-section"><div className="section-heading"><div className="eyebrow">YOUR NEXT OPPORTUNITY</div><div className="heading-row"><h2>Find your kind of work.</h2><button className="location-button" onClick={()=>setLocationOpen(true)}><MapPin size={16}/>{location?location.label:'Set your location'}<ChevronDown size={15}/></button></div></div>
- <div className="search-row"><label className="search-field"><Search size={20}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Job title, business or keyword" aria-label="Search jobs"/></label><button className={'button filter-button '+(filters?'selected':'')} onClick={()=>setFilterOpen(true)}><SlidersHorizontal size={18}/> Filters {filters>0&&<span className="count">{filters}</span>}</button></div>
- <div className="categories"><button className={!category?'chosen':''} onClick={()=>setCategory('')}>All work</button>{categories.map(c=><button className={category===c?'chosen':''} key={c} onClick={()=>setCategory(c)}>{c}</button>)}</div>
- <div className="content-grid"><div><div className="results-line"><span>{location?<>Within <strong>{radius} km</strong> of you <span className="muted">· {loading?'Finding jobs…':`${jobs.length} ${jobs.length===1?'job':'jobs'}`}</span></>:'Local jobs start with your location'}</span><label className="sort">Sort by <select aria-label="Sort jobs" value={sort} onChange={e=>setSort(e.target.value)}><option value="distance">Closest first</option><option value="pay">Highest hourly pay</option><option value="newest">Newest first</option></select></label></div>
- {notice&&<div role="status" className="notice"><Check size={18}/>{notice}<button aria-label="Dismiss" onClick={()=>setNotice('')}><X size={17}/></button></div>}
- {!location?<div className="empty-card"><div className="empty-icon"><LocateFixed size={31}/></div><span className="eyebrow">A SHORTER COMMUTE STARTS HERE</span><h3>What’s happening near you?</h3><p>Set your location to discover jobs inside your radius.<br/>We’ll put the closest opportunities first.</p><button className="button green" onClick={()=>setLocationOpen(true)}><MapPin size={17}/> Set my location</button><small>Your saved location stays on this device. Searches send coordinates to find nearby jobs.</small></div>:error?<div className="empty-card"><h3>We couldn’t load jobs</h3><p role="alert">{error}</p><button className="button dark" onClick={()=>setRefresh(v=>v+1)}>Try again</button></div>:loading?<div className="empty-card" role="status"><LoaderCircle className="spin"/><p>Finding work in your area…</p></div>:jobs.length===0?<div className="empty-card"><div className="empty-icon"><BriefcaseBusiness size={30}/></div><h3>No matching jobs here yet.</h3><p>This community is just getting started. Try a larger radius,<br/>change your filters, or post the first opportunity.</p><div className="empty-actions"><button className="button outline" onClick={()=>setFilterOpen(true)}>Adjust filters</button><button className="button green" onClick={()=>{window.location.href='post-job.html';}}>Post a job <Plus size={17}/></button></div><small>Only real, upcoming listings appear here.</small></div>:<div className="job-list">{jobs.map(job=><article className="job-card" key={job.id}><div className="job-top"><span className="business-avatar">{job.business.slice(0,2).toUpperCase()}</span><div className="job-title"><small>{job.business}</small><h3><button onClick={()=>{window.location.href='job.html?id='+encodeURIComponent(job.id);}}>{job.title}</button></h3></div><span className="distance"><Navigation size={13}/>{job.distance.toFixed(1)} km</span></div><p className="job-description">{job.description}</p><div className="job-meta"><span><MapPin size={14}/>{job.city}</span><span><Clock size={14}/>{job.hours} hours</span><span>{when(job.start)} SAST</span></div><div className="job-bottom"><div><strong>{money(job.pay)}</strong><span> / {job.payType==='hour'?'hour':'job'}</span><small>{job.payType==='hour'?`${money(job.pay*job.hours)} estimated total`:`${money(job.hourly)} equivalent / hour`}</small></div><button className="button outline" onClick={()=>{window.location.href='job.html?id='+encodeURIComponent(job.id);}}>View job <ArrowUpRight size={16}/></button></div></article>)}</div>}
- </div><aside><div className="local-note"><span className="map-icon mint"><Navigation size={21}/></span><h3>A little closer.<br/>A lot more possible.</h3><p>Your distance filter helps you find work that fits your everyday journey.</p><div className="note-rule"/><div><MapPin size={17}/><span>{radius} km search radius</span></div><div><ShieldCheck size={17}/><span>Poster’s hiring radius respected</span></div><small>Distances are straight-line estimates. Check your travel route before agreeing to work.</small></div><div className="hiring-note"><span className="eyebrow">FOR LOCAL BUSINESSES</span><h3>Good people.<br/>Right nearby.</h3><p>Tell your community what you need, what it pays, and when it starts.</p><button onClick={()=>{window.location.href='post-job.html';}}>Post your first job <ArrowUpRight size={17}/></button></div></aside></div></section>
- <section id="how" className="how"><div><span className="eyebrow">SIMPLE FROM THE START</span><h2>Local work.<br/>Less legwork.</h2></div><div><span className="step">01</span><h3>Choose your area</h3><p>Use your location and choose how far you’re willing to travel.</p></div><div><span className="step">02</span><h3>Find a good fit</h3><p>Compare the job, pay, hours and distance before making contact.</p></div><div><span className="step">03</span><h3>Connect locally</h3><p>Contact the poster to agree on the details. Payments are arranged directly.</p></div></section>
- </main><footer><a className="footer-brand" href="/">communitywork<span> SOUTH AFRICA</span></a><p>Opportunity starts in your community.</p><span>Early access · All nine provinces</span></footer>
- {locationOpen&&<Modal title="Find work around you" onClose={()=>setLocationOpen(false)}><p className="modal-intro">Use your current location anywhere in South Africa, or search for your city, suburb or street address.</p><LocationPicker onSelect={saveLocation}/></Modal>}
- {filterOpen&&<Modal title="Filter jobs" onClose={()=>setFilterOpen(false)}><div className="form-stack"><label>Distance from you <strong>{radius} km</strong><input type="range" min="1" max="200" value={radius} onChange={e=>setRadius(Number(e.target.value))}/><span className="range-labels"><span>1 km</span><span>200 km</span></span></label><label>Type of work<select value={category} onChange={e=>setCategory(e.target.value)}><option value="">All categories</option>{categories.map(c=><option key={c}>{c}</option>)}</select></label><label>Minimum hourly pay (R)<input type="number" min="0" step="1" placeholder="Any pay" value={minPay} onChange={e=>setMinPay(e.target.value)}/><small>Total-job pay is divided by hours for this filter.</small></label><p className="info-box">Jobs also need to be inside the poster’s hiring radius. Increasing your distance won’t override their limit.</p><div className="modal-actions"><button className="button outline" onClick={()=>{setRadius(25);setCategory('');setMinPay('');setSort('distance');}}>Reset</button><button className="button green" onClick={()=>setFilterOpen(false)}>Show matching jobs <ArrowRight size={17}/></button></div></div></Modal>}
- {postOpen&&<Modal title="Post a local opportunity" wide onClose={()=>setPostOpen(false)}><PostForm onDone={()=>{setPostOpen(false);setNotice('Your job is posted. Workers within its hiring radius can find it.');setRefresh(v=>v+1);}}/></Modal>}
- {detail&&<Modal title={detail.title} onClose={()=>setDetail(null)}><p className="modal-intro">{detail.business} · {detail.city}, {detail.province}</p><div className="detail-pay">{money(detail.pay)}<span> / {detail.payType==='hour'?'hour':'job'}</span></div><div className="detail-stats"><span><Clock size={17}/>{detail.hours} hours</span><span><Navigation size={17}/>{detail.distance.toFixed(1)} km away</span></div><p><strong>Starts:</strong> {when(detail.start)} SAST</p><p className="full-description">{detail.description}</p><div className="info-box"><strong>Contact the poster</strong><p className="contact-text">{detail.contact}</p><small>Confirm the address, hours and payment arrangements directly. This version does not process payments or book shifts.</small></div></Modal>}
- </>;
+
+type Mode = 'all' | 'onsite' | 'remote';
+const radii = [10, 25, 50, 100, 200, 0];
+const radiusLabel = (r: number) => r ? `${r} km` : 'Anywhere in SA';
+const PAGE = 24;
+
+// ---------- Shared location state (auto-detect once, then remember) ----------
+
+export function useAreaLocation() {
+  const [location, setLocation] = useState<Location | null>(() => readStore<Location | null>('cw-location', null));
+  const [locating, setLocating] = useState(false);
+  const [reason, setReason] = useState<string>('');
+  const tried = useRef(false);
+
+  useEffect(() => {
+    if (location || tried.current) return;
+    tried.current = true;
+    setLocating(true);
+    autoLocate().then(r => {
+      if (r.location) { setLocation(r.location); writeStore('cw-location', r.location); }
+      else setReason(r.reason || 'unavailable');
+    }).finally(() => setLocating(false));
+  }, [location]);
+
+  const choose = (l: Location) => { setLocation(l); setReason(''); writeStore('cw-location', l); };
+  return {location, locating, reason, choose};
 }
-function Modal({title,onClose,wide=false,children}:{title:string;onClose:()=>void;wide?:boolean;children:React.ReactNode}) {const ref=useRef<HTMLDialogElement>(null);useEffect(()=>{ref.current?.showModal();const old=document.body.style.overflow;document.body.style.overflow='hidden';return()=>{document.body.style.overflow=old;};},[]);return <dialog ref={ref} className={'modal '+(wide?'wide':'')} onCancel={onClose} onClick={e=>{if(e.target===e.currentTarget)onClose();}}><div className="modal-head"><h2>{title}</h2><button aria-label="Close dialog" onClick={onClose}><X size={22}/></button></div>{children}</dialog>;}
-export function PostForm({onDone}:{onDone:()=>void}) {const [spot,setSpot]=useState<Location|null>(null),[picking,setPicking]=useState(false),[error,setError]=useState(''),[busy,setBusy]=useState(false),[payType,setPayType]=useState('hour');async function submit(e:React.FormEvent<HTMLFormElement>){e.preventDefault();if(!spot){setError('Set the exact job location before posting.');return;}setBusy(true);setError('');const f=new FormData(e.currentTarget),body:any=Object.fromEntries(f.entries());for(const k of ['pay','hours','radius'])body[k]=Number(body[k]);body.latitude=spot.lat;body.longitude=spot.lon;body.start=String(body.start)+':00+02:00';try{const r=await fetch('https://south-africa-community-work.chummy-tuna-9459.chatgpt.site/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data:any=await r.json();if(!r.ok)throw Error(data.error);onDone();}catch(e){setError(e instanceof Error?e.message:'Unable to post job');}finally{setBusy(false);}}return <><p className="modal-intro">Open to posters in every South African city and town. Give workers clear details before they get in touch.</p>{picking?<><LocationPicker onSelect={l=>{setSpot(l);setPicking(false);}}/><button type="button" className="text-button" onClick={()=>setPicking(false)}>Back to job details</button></>:null}<form style={{display:picking?'none':undefined}} className="form-stack" onSubmit={submit}><div className="form-grid"><label>Job title<input name="title" placeholder="e.g. Weekend kitchen assistant" required minLength={2} maxLength={100}/></label><label>Business or poster name<input name="business" placeholder="Who is hiring?" required minLength={2} maxLength={120}/></label></div><label>Job description<textarea name="description" rows={4} placeholder="Describe the work, responsibilities, skills and any equipment needed." minLength={2} maxLength={4000} required/></label><div className="form-grid"><label>City / town<input name="city" placeholder="Any South African city or town" required minLength={2} maxLength={100}/></label><label>Province<select name="province" required defaultValue=""><option value="" disabled>Select province</option>{provinces.map(p=><option key={p}>{p}</option>)}</select></label></div><div className="form-grid"><label>Category<select name="category" required defaultValue=""><option value="" disabled>Select category</option>{categories.map(p=><option key={p}>{p}</option>)}</select></label><label>Hiring radius (km)<input name="radius" type="number" min="1" max="200" defaultValue="25" required/></label></div><button type="button" className="location-set" onClick={()=>setPicking(true)}><MapPin size={21}/><span><strong>{spot?'Job location set':'Set the exact job location'}</strong><small>{spot?`${spot.label} · Change location`:'Search the workplace address or use on-site location'}</small></span>{spot?<Check size={20}/>:<Plus size={20}/>}</button><div className="form-grid three"><label>Pay amount (R)<input name="pay" type="number" min="0.01" max="1000000" step="0.01" placeholder="e.g. 65" required/></label><label>Pay basis<select name="payType" value={payType} onChange={e=>setPayType(e.target.value)}><option value="hour">Per hour</option><option value="job">Total for the job</option></select></label><label>Hours for this shift<input name="hours" type="number" min="0.25" max="24" step="0.25" placeholder="e.g. 8" required/></label></div><div className="form-grid"><label>Start date & time (SAST)<input name="start" type="datetime-local" required/></label><label>Public contact details<input name="contact" placeholder="Business email or phone" required minLength={2} maxLength={200}/></label></div><p className="info-box">This pay amount is what you offer the worker, not a posting fee. Your contact details are displayed to nearby workers. Payment is arranged directly.</p><label className="checkbox"><input type="checkbox" required/><span>I confirm these details are accurate and I’m authorized to post this opportunity.</span></label>{error&&<p role="alert" className="error">{error}</p>}<button className="button green full" disabled={busy}>{busy?<LoaderCircle size={18} className="spin"/>:<Plus size={18}/>} {busy?'Posting…':'Post this job'}</button></form></>;}
+
+// ---------- Data ----------
+
+function useFeed() {
+  const [feed, setFeed] = useState<Feed | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    fetch(FEED_URL, {cache: 'no-cache'})
+      .then(r => { if (!r.ok) throw Error(); return r.json(); })
+      .then(d => setFeed(d as Feed))
+      .catch(() => setError(true));
+  }, []);
+  return {feed, feedError: error};
+}
+
+function useCommunityJobs(location: Location | null, radius: number, refresh: number) {
+  const [jobs, setJobs] = useState<CommunityJob[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!location) { setJobs([]); return; }
+    const ctrl = new AbortController();
+    setLoading(true); setError('');
+    const p = new URLSearchParams({lat: String(location.lat), lon: String(location.lon), radius: String(radius || 200), sort: 'distance'});
+    fetch(API + '?' + p, {signal: ctrl.signal})
+      .then(async r => { const d: any = await r.json(); if (!r.ok) throw Error(d.error || 'Community jobs could not load.'); setJobs(d.jobs || []); })
+      .catch(e => { if (!ctrl.signal.aborted) { setError(e.message); setJobs([]); } })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
+    return () => ctrl.abort();
+  }, [location?.lat, location?.lon, radius, refresh]);
+  return {community: jobs, communityLoading: loading, communityError: error};
+}
+
+function toListings(community: CommunityJob[], feed: Feed | null, location: Location | null): Listing[] {
+  const a: Listing[] = community.map(j => ({
+    key: 'community:' + j.id, kind: 'community', mode: 'onsite', title: j.title, company: j.business,
+    place: `${j.city}, ${j.province}`, category: j.category, excerpt: j.description.slice(0, 220),
+    payLabel: `${money(j.pay)} / ${j.payType === 'hour' ? 'hr' : 'job'}`,
+    paySub: j.payType === 'hour' ? `${j.hours} h · about ${money(j.pay * j.hours)}` : `${j.hours} h · ${money(j.hourly)}/hr`,
+    hourly: j.hourly, distance: j.distance, date: j.createdAt || Date.parse(j.start),
+    dateLabel: 'Starts ' + when(j.start), href: 'job.html?id=' + encodeURIComponent(j.id), external: false,
+  }));
+  const b: Listing[] = (feed?.jobs || []).map(j => ({
+    key: j.id, kind: 'feed', mode: j.mode, title: j.title, company: j.company, place: j.location, category: j.category,
+    excerpt: j.excerpt, payLabel: j.salary, paySub: j.type, hourly: j.hourlyZar,
+    distance: location && j.lat != null && j.lon != null ? distanceKm(location.lat, location.lon, j.lat, j.lon) : undefined,
+    date: Date.parse(j.posted), dateLabel: ago(Date.parse(j.posted)), href: j.url, external: true, source: j.source, sourceUrl: j.sourceUrl,
+  }));
+  return [...a, ...b];
+}
+
+// ---------- Feed ----------
+
+export default function JobsView({welcome = false}: {welcome?: boolean}) {
+  const initialMode = (new URLSearchParams(window.location.search).get('mode') as Mode) || 'all';
+  const {location, locating, reason, choose} = useAreaLocation();
+  const [mode, setMode] = useState<Mode>(['all', 'onsite', 'remote'].includes(initialMode) ? initialMode : 'all');
+  const [radius, setRadius] = useState<number>(() => readStore('cw-radius-v2', 0));
+  const [category, setCategory] = useState('');
+  const [query, setQuery] = useState('');
+  const [minPay, setMinPay] = useState('');
+  const [sort, setSort] = useState<'best' | 'newest' | 'pay'>('best');
+  const [shown, setShown] = useState(PAGE);
+  const [sheet, setSheet] = useState<'' | 'location' | 'filters'>('');
+  const [refresh, setRefresh] = useState(0);
+  const [saved, setSaved] = useState(() => new Set(savedJobs().map(s => s.key)));
+
+  const {feed, feedError} = useFeed();
+  const {community, communityLoading, communityError} = useCommunityJobs(location, radius, refresh);
+
+  useEffect(() => writeStore('cw-radius-v2', radius), [radius]);
+  useEffect(() => setShown(PAGE), [mode, radius, category, query, minPay, sort, location]);
+  useEffect(() => {
+    const sync = () => setSaved(new Set(savedJobs().map(s => s.key)));
+    window.addEventListener('cw-saved', sync);
+    return () => window.removeEventListener('cw-saved', sync);
+  }, []);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (mode === 'all') url.searchParams.delete('mode'); else url.searchParams.set('mode', mode);
+    history.replaceState(null, '', url);
+  }, [mode]);
+
+  const all = useMemo(() => toListings(community, feed, location), [community, feed, location]);
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const min = Number(minPay) || 0;
+    return all.filter(l => {
+      if (category && l.category !== category) return false;
+      if (q && !`${l.title} ${l.company} ${l.place} ${l.excerpt}`.toLowerCase().includes(q)) return false;
+      if (min && !(l.hourly && l.hourly >= min)) return false;
+      if (l.mode === 'onsite' && location && radius && l.kind === 'feed') {
+        if (l.distance == null || l.distance > radius) return false;
+      }
+      return true;
+    });
+  }, [all, category, query, minPay, radius, location]);
+
+  const counts = useMemo(() => ({
+    all: matches.length,
+    onsite: matches.filter(l => l.mode === 'onsite').length,
+    remote: matches.filter(l => l.mode === 'remote').length,
+  }), [matches]);
+
+  const list = useMemo(() => {
+    const out = matches.filter(l => mode === 'all' || l.mode === mode);
+    const near = (l: Listing) => (l.mode === 'remote' ? 1e6 : l.distance ?? 5e5);
+    out.sort((a, b) => {
+      if (sort === 'newest') return b.date - a.date;
+      if (sort === 'pay') return (b.hourly || 0) - (a.hourly || 0) || b.date - a.date;
+      // Best match: community posts near you first, then nearest in-person, then the newest online roles.
+      if (a.kind !== b.kind && a.kind === 'community') return -1;
+      if (a.kind !== b.kind && b.kind === 'community') return 1;
+      return location ? near(a) - near(b) || b.date - a.date : (a.mode === b.mode ? b.date - a.date : a.mode === 'onsite' ? -1 : 1);
+    });
+    return out;
+  }, [matches, mode, sort, location]);
+
+  const filterCount = (radius ? 1 : 0) + (minPay ? 1 : 0) + (category ? 1 : 0);
+  const loading = !feed && !feedError;
+  const area = location ? location.label.split(',')[0] : '';
+
+  function save(l: Listing) {
+    toggleSaved({key: l.key, title: l.title, company: l.company, place: l.place, href: l.href, external: l.external, mode: l.mode});
+  }
+
+  return (
+    <div className="feed-page">
+      {welcome && (
+        <section className="welcome">
+          <div>
+            <p className="overline"><span className="live-dot"/> Jobs across all nine provinces</p>
+            <h1>Good work,<br/>closer to <em>home.</em></h1>
+            <p className="lede">Shifts from your community, in-person jobs across South Africa, and online work you can do from anywhere.</p>
+          </div>
+          <div className="welcome-stats" aria-label="What you can find">
+            <div><Users size={20}/><strong>Community</strong><span>Local shifts posted here</span></div>
+            <div><Building2 size={20}/><strong>In person</strong><span>Employers across SA</span></div>
+            <div><Laptop size={20}/><strong>Online</strong><span>Remote roles open to SA</span></div>
+          </div>
+        </section>
+      )}
+
+      <section className="feed-tools" aria-label="Search and filters">
+        <div className="tools-top">
+          {!welcome && <h1 className="feed-title">Find work</h1>}
+          <button className={'location-chip' + (location ? '' : ' unset')} onClick={() => setSheet('location')}>
+            {locating ? <LoaderCircle className="spin" size={16}/> : <MapPin size={16}/>}
+            <span>{locating ? 'Finding your area…' : location ? location.label : 'Set your area'}</span>
+            <ChevronDown size={15}/>
+          </button>
+        </div>
+        <div className="search-row">
+          <label className="search-box big">
+            <Search size={19}/>
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Job title, company or skill" aria-label="Search jobs" enterKeyHint="search"/>
+            {query && <button className="icon-btn" aria-label="Clear search" onClick={() => setQuery('')}><X size={17}/></button>}
+          </label>
+          <button className={'btn btn-outline filter-btn' + (filterCount ? ' on' : '')} onClick={() => setSheet('filters')} aria-label="Filters">
+            <SlidersHorizontal size={18}/><span className="hide-sm">Filters</span>{filterCount > 0 && <span className="pill-count">{filterCount}</span>}
+          </button>
+        </div>
+        <div className="segmented" role="tablist" aria-label="Work type">
+          {([['all', 'All jobs', BriefcaseBusiness], ['onsite', 'In person', MapPin], ['remote', 'Online', Globe]] as const).map(([m, label, Icon]) => (
+            <button key={m} role="tab" aria-selected={mode === m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>
+              <Icon size={16}/>{label}<span className="seg-count">{loading ? '·' : counts[m]}</span>
+            </button>
+          ))}
+        </div>
+        <div className="chip-scroll" role="group" aria-label="Category">
+          <button className={!category ? 'on' : ''} onClick={() => setCategory('')}>All types</button>
+          {browseCategories.map(c => <button key={c} className={category === c ? 'on' : ''} onClick={() => setCategory(category === c ? '' : c)}>{c}</button>)}
+        </div>
+      </section>
+
+      <div className="feed-layout">
+        <div className="feed-main">
+          {!location && !locating && (
+            <div className="banner">
+              <LocateFixed size={22}/>
+              <div>
+                <strong>{reason === 'outside' ? 'You seem to be outside South Africa' : 'Set your area for jobs near you'}</strong>
+                <span>{reason === 'denied' ? 'Location is blocked, so pick your city instead.' : 'We’ll show distances and local community shifts. Online jobs work from anywhere.'}</span>
+              </div>
+              <button className="btn btn-primary btn-sm" onClick={() => setSheet('location')}>Choose area</button>
+            </div>
+          )}
+          {location?.approx && (
+            <button className="banner subtle" onClick={() => setSheet('location')}>
+              <MapPin size={18}/><div><span>Showing jobs around <strong>{area}</strong> based on your network. Tap to set your exact area.</span></div>
+            </button>
+          )}
+
+          <div className="results-bar">
+            <span>
+              <strong>{loading ? 'Loading jobs…' : `${list.length.toLocaleString('en-ZA')} ${list.length === 1 ? 'job' : 'jobs'}`}</strong>
+              {location && mode !== 'remote' && <span className="muted"> · {radius ? `within ${radius} km of ${area}` : `nearest to ${area}`}</span>}
+              {communityLoading && <LoaderCircle className="spin inline" size={14}/>}
+            </span>
+            <label className="sort">
+              <span className="hide-sm">Sort</span>
+              <select value={sort} onChange={e => setSort(e.target.value as typeof sort)} aria-label="Sort jobs">
+                <option value="best">{location ? 'Closest first' : 'Best match'}</option>
+                <option value="newest">Newest</option>
+                <option value="pay">Highest pay</option>
+              </select>
+            </label>
+          </div>
+
+          {communityError && location && (
+            <p className="alert soft">Community shifts couldn’t load right now. <button className="link" onClick={() => setRefresh(v => v + 1)}><RefreshCw size={13}/> Retry</button></p>
+          )}
+
+          {loading ? (
+            <div className="job-list">{[0, 1, 2].map(i => <div className="job-card skeleton" key={i}><span/><span/><span/></div>)}</div>
+          ) : list.length === 0 ? (
+            <div className="empty">
+              <div className="empty-icon"><BriefcaseBusiness size={28}/></div>
+              <h2>No matching jobs yet</h2>
+              <p>{feedError || !feed?.updated ? 'More listings are on their way. Try again soon, or widen your search.' : 'Try a bigger distance, another category, or clear your search.'}</p>
+              <div className="row-gap">
+                <button className="btn btn-outline" onClick={() => { setQuery(''); setCategory(''); setMinPay(''); setRadius(0); setMode('all'); }}>Clear filters</button>
+                <a className="btn btn-primary" href="post-job.html"><Plus size={17}/>Post a job</a>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="job-list">
+                {list.slice(0, shown).map(l => <JobCard key={l.key} job={l} saved={saved.has(l.key)} onSave={() => save(l)}/>)}
+              </div>
+              {shown < list.length && <button className="btn btn-outline btn-block more" onClick={() => setShown(s => s + PAGE)}>Show more jobs</button>}
+            </>
+          )}
+
+          {feed?.sources?.length ? (
+            <p className="sources">
+              Listings from community posters, plus {feed.sources.map((s, i) => <span key={s.name}>{i ? ', ' : ''}<a href={s.url} target="_blank" rel="noreferrer">{s.name}</a></span>)}.
+              {feed.updated && <> Updated {ago(Date.parse(feed.updated)).toLowerCase()}.</>} Apply on the original site.
+            </p>
+          ) : null}
+        </div>
+
+        <aside className="feed-side">
+          <div className="side-card mint">
+            <Navigation size={20}/>
+            <h3>{location ? area : 'Your area'}</h3>
+            <p>{location ? `${radiusLabel(radius)} search${location.approx ? ' · approximate' : ''}` : 'Set your area to see what’s nearby.'}</p>
+            <button className="btn btn-outline btn-sm" onClick={() => setSheet('location')}>{location ? 'Change area' : 'Set area'}</button>
+            <small>Distances are straight-line estimates. Check your route before agreeing to work.</small>
+          </div>
+          <div className="side-card dark">
+            <span className="overline">For local businesses</span>
+            <h3>Need hands on deck?</h3>
+            <p>Post a shift with clear pay and hours. Nearby workers see it first.</p>
+            <a className="btn btn-light btn-sm" href="post-job.html">Post a job <ArrowUpRight size={15}/></a>
+          </div>
+        </aside>
+      </div>
+
+      {sheet === 'location' && (
+        <Sheet title="Where do you want to work?" onClose={() => setSheet('')}>
+          <LocationPicker onSelect={l => { choose(l); setSheet(''); }}/>
+        </Sheet>
+      )}
+      {sheet === 'filters' && (
+        <Sheet title="Filters" onClose={() => setSheet('')}>
+          <div className="form">
+            <fieldset>
+              <legend>Distance from {area || 'you'}</legend>
+              <div className="chip-wrap">
+                {radii.map(r => <button key={r} type="button" className={radius === r ? 'on' : ''} onClick={() => setRadius(r)}>{radiusLabel(r)}</button>)}
+              </div>
+              {!location && <small>Set your area to use distance.</small>}
+            </fieldset>
+            <label className="field">Type of work
+              <select value={category} onChange={e => setCategory(e.target.value)}>
+                <option value="">All types</option>
+                {browseCategories.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </label>
+            <label className="field">Minimum pay per hour (R)
+              <input type="number" inputMode="numeric" min="0" step="1" placeholder="Any pay" value={minPay} onChange={e => setMinPay(e.target.value)}/>
+              <small>Only jobs that list pay in rand are shown when this is set.</small>
+            </label>
+            <div className="sheet-actions">
+              <button className="btn btn-outline" onClick={() => { setRadius(0); setCategory(''); setMinPay(''); setSort('best'); }}>Reset</button>
+              <button className="btn btn-primary" onClick={() => setSheet('')}>Show {list.length.toLocaleString('en-ZA')} jobs</button>
+            </div>
+          </div>
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+function JobCard({job, saved, onSave}: {job: Listing; saved: boolean; onSave: () => void}) {
+  const initials = job.company.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'CW';
+  const linkProps = job.external ? {target: '_blank', rel: 'noopener noreferrer nofollow'} : {};
+  return (
+    <article className={'job-card' + (job.kind === 'community' ? ' community' : '')}>
+      <div className="card-head">
+        <span className={'avatar ' + job.mode}>{initials}</span>
+        <div className="card-title">
+          <h3><a href={job.href} {...linkProps}>{job.title}</a></h3>
+          <p>{job.company}</p>
+        </div>
+        <button className={'save-btn' + (saved ? ' on' : '')} onClick={onSave} aria-pressed={saved} aria-label={saved ? 'Remove from saved' : 'Save job'}>
+          <Bookmark size={19} fill={saved ? 'currentColor' : 'none'}/>
+        </button>
+      </div>
+      <div className="tags">
+        <span className={'tag ' + job.mode}>{job.mode === 'remote' ? <><Globe size={13}/>Online</> : <><MapPin size={13}/>In person</>}</span>
+        {job.kind === 'community' && <span className="tag local"><Users size={13}/>Community post</span>}
+        <span className="tag">{job.category}</span>
+      </div>
+      {job.excerpt && <p className="excerpt">{job.excerpt}</p>}
+      <div className="meta">
+        <span title={job.place}><MapPin size={14}/>{job.place}</span>
+        {job.distance != null && job.mode === 'onsite' && <span><Navigation size={14}/>{job.distance < 1 ? '<1' : job.distance.toFixed(job.distance < 10 ? 1 : 0)} km</span>}
+        <span>{job.dateLabel}</span>
+      </div>
+      <div className="card-foot">
+        <div className="pay">
+          {job.payLabel ? <strong>{job.payLabel}</strong> : <span className="muted">Pay not listed</span>}
+          {job.paySub && <small>{job.paySub}</small>}
+        </div>
+        <a className={'btn btn-sm ' + (job.external ? 'btn-outline' : 'btn-primary')} href={job.href} {...linkProps}>
+          {job.external ? <>Apply<ArrowUpRight size={15}/></> : 'View job'}
+        </a>
+      </div>
+      {job.source && <p className="via">via <a href={job.sourceUrl} target="_blank" rel="noreferrer">{job.source}</a></p>}
+    </article>
+  );
+}
+
+// Bottom sheet on phones, centred dialog on larger screens.
+export function Sheet({title, onClose, wide = false, children}: {title: string; onClose: () => void; wide?: boolean; children: React.ReactNode}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    ref.current?.showModal();
+    const old = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = old; };
+  }, []);
+  return (
+    <dialog ref={ref} className={'sheet' + (wide ? ' wide' : '')} onCancel={e => { e.preventDefault(); onClose(); }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sheet-grip" aria-hidden/>
+      <div className="sheet-head"><h2>{title}</h2><button className="icon-btn" aria-label="Close" onClick={onClose}><X size={22}/></button></div>
+      <div className="sheet-body">{children}</div>
+    </dialog>
+  );
+}
+
+// ---------- Posting form (same API contract as before) ----------
+
+export function PostForm({onDone}: {onDone: () => void}) {
+  const [spot, setSpot] = useState<Location | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [payType, setPayType] = useState('hour');
+  const [city, setCity] = useState('');
+  const [province, setProvince] = useState('');
+
+  function pickSpot(l: Location) {
+    setSpot(l); setPicking(false);
+    const parts = l.label.split(',').map(s => s.trim());
+    const prov = provinces.find(p => parts.includes(p));
+    if (prov && !province) setProvince(prov);
+    if (!city) {
+      const guess = parts.filter(p => p !== prov && !/^\d/.test(p) && p !== 'My current location');
+      if (guess.length) setCity(guess[guess.length - 1]);
+    }
+  }
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!spot) { setError('Set the workplace location before posting.'); return; }
+    setBusy(true); setError('');
+    const f = new FormData(e.currentTarget);
+    const body: any = Object.fromEntries(f.entries());
+    delete body.confirm;
+    for (const k of ['pay', 'hours', 'radius']) body[k] = Number(body[k]);
+    body.latitude = spot.lat; body.longitude = spot.lon;
+    body.start = String(body.start) + ':00+02:00';
+    try {
+      const r = await fetch(API, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+      const data: any = await r.json();
+      if (!r.ok) throw Error(data.error);
+      onDone();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to post job'); }
+    finally { setBusy(false); }
+  }
+
+  if (picking) return (
+    <div className="form">
+      <h2 className="form-step">Where is the work?</h2>
+      <LocationPicker purpose="post" onSelect={pickSpot}/>
+      <button type="button" className="btn btn-outline" onClick={() => setPicking(false)}>Back to job details</button>
+    </div>
+  );
+
+  return (
+    <form className="form" onSubmit={submit}>
+      <h2 className="form-step"><span>1</span>The job</h2>
+      <label className="field">Job title<input name="title" placeholder="e.g. Weekend kitchen assistant" required minLength={2} maxLength={100}/></label>
+      <label className="field">Business or your name<input name="business" placeholder="Who is hiring?" required minLength={2} maxLength={120}/></label>
+      <label className="field">What the work involves<textarea name="description" rows={4} placeholder="Duties, skills, experience and any equipment needed." minLength={2} maxLength={4000} required/></label>
+      <label className="field">Category
+        <select name="category" required defaultValue="">
+          <option value="" disabled>Select category</option>
+          {postCategories.map(c => <option key={c}>{c}</option>)}
+        </select>
+      </label>
+
+      <h2 className="form-step"><span>2</span>Where</h2>
+      <button type="button" className={'location-set' + (spot ? ' done' : '')} onClick={() => setPicking(true)}>
+        <MapPin size={21}/>
+        <span><strong>{spot ? spot.label : 'Set the workplace location'}</strong><small>{spot ? 'Tap to change' : 'Search the address or use your location on site'}</small></span>
+        {spot ? <Check size={20}/> : <Plus size={20}/>}
+      </button>
+      <div className="grid-2">
+        <label className="field">City or town<input name="city" value={city} onChange={e => setCity(e.target.value)} placeholder="e.g. Mthatha" required minLength={2} maxLength={100}/></label>
+        <label className="field">Province
+          <select name="province" required value={province} onChange={e => setProvince(e.target.value)}>
+            <option value="" disabled>Select province</option>
+            {provinces.map(p => <option key={p}>{p}</option>)}
+          </select>
+        </label>
+      </div>
+      <label className="field">Hire people within (km)<input name="radius" type="number" inputMode="numeric" min="1" max="200" defaultValue="25" required/></label>
+
+      <h2 className="form-step"><span>3</span>Pay and time</h2>
+      <div className="grid-2">
+        <label className="field">Pay (R)<input name="pay" type="number" inputMode="decimal" min="0.01" max="1000000" step="0.01" placeholder="e.g. 65" required/></label>
+        <label className="field">Paid
+          <select name="payType" value={payType} onChange={e => setPayType(e.target.value)}>
+            <option value="hour">Per hour</option>
+            <option value="job">For the whole job</option>
+          </select>
+        </label>
+      </div>
+      <div className="grid-2">
+        <label className="field">Hours<input name="hours" type="number" inputMode="decimal" min="0.25" max="24" step="0.25" placeholder="e.g. 8" required/></label>
+        <label className="field">Starts (SAST)<input name="start" type="datetime-local" required/></label>
+      </div>
+
+      <h2 className="form-step"><span>4</span>Contact</h2>
+      <label className="field">Public contact details<input name="contact" placeholder="Business phone, WhatsApp or email" required minLength={2} maxLength={200}/>
+        <small>Shown to workers in your hiring area.</small>
+      </label>
+      <p className="hint-box">The pay is what you offer the worker. There’s no posting fee, and payment is arranged directly between you.</p>
+      <label className="check"><input type="checkbox" name="confirm" required/><span>These details are accurate and I’m allowed to post this job.</span></label>
+      {error && <p role="alert" className="alert">{error}</p>}
+      <button className="btn btn-primary btn-block btn-lg" disabled={busy}>
+        {busy ? <LoaderCircle size={18} className="spin"/> : <Plus size={18}/>}{busy ? 'Posting…' : 'Post this job'}
+      </button>
+    </form>
+  );
+}

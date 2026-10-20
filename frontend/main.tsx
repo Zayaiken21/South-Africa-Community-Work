@@ -1,23 +1,376 @@
-import React,{useState,useEffect} from 'react';
+import {useEffect, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {MapPin,Clock,Navigation,ArrowRight,ArrowLeft,Plus,Menu,X,Check,Bookmark,Search,ShieldCheck,Mail} from 'lucide-react';
-import JobsView,{LocationPicker,PostForm} from './JobsView';
-import {validLocation} from '../lib/jobs';
-import '../app/globals.css';
-import './pages.css';
-const API='https://south-africa-community-work.chummy-tuna-9459.chatgpt.site/api/jobs';
-const file=window.location.pathname.split('/').pop()||'index.html';
-const currency=(n:number)=>new Intl.NumberFormat('en-ZA',{style:'currency',currency:'ZAR',maximumFractionDigits:2}).format(n);
-function App(){const [menu,setMenu]=useState(false);return <><header className="header site-header"><a className="brand" href="index.html"><span className="brand-symbol"><span/><span/><span/><span/></span><span>community<span className="brand-light">work</span><small>SOUTH AFRICA</small></span></a><nav className={menu?'mobile-open':''} aria-label="Main navigation"><a className={file==='find-work.html'?'active':''} href="find-work.html">Find work</a><a href="how-it-works.html">How it works</a><a href="saved-jobs.html">Saved jobs</a><a href="about.html">About</a></nav><a className="button dark header-post" href="post-job.html"><Plus size={16}/>Post a job</a><button className="menu-toggle" aria-label="Toggle menu" aria-expanded={menu} onClick={()=>setMenu(!menu)}>{menu?<X/>:<Menu/>}</button></header>
- {file==='index.html'||file==='find-work.html'?<div className={'embedded-app '+(file==='find-work.html'?'jobs-page':'')}><JobsView/></div>:file==='post-job.html'?<PostPage/>:file==='job.html'?<Detail/>:file==='saved-jobs.html'?<Saved/>:file==='how-it-works.html'?<How/>:file==='about.html'?<About/>:file==='help.html'?<Help/>:file==='privacy.html'?<Privacy/>:file==='terms.html'?<Terms/>:<section className="page-shell"><h1>Page not found</h1><a href="index.html">Return home</a></section>}
- <footer className="site-footer"><div><a className="footer-brand" href="index.html">communitywork<span>SOUTH AFRICA</span></a><p>Opportunity starts in your community.</p></div><nav aria-label="Footer"><a href="find-work.html">Find work</a><a href="post-job.html">Post a job</a><a href="how-it-works.html">How it works</a><a href="about.html">About</a><a href="help.html">Help</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></nav><small>South Africa · All nine provinces</small></footer></>;}
-function PageHead({tag,title,description}:{tag:string;title:string;description:string}){return <div className="page-head"><span className="eyebrow">{tag}</span><h1>{title}</h1><p>{description}</p></div>}
-function PostPage(){const [done,setDone]=useState(false);return <main className="page-shell"><PageHead tag="HIRE IN YOUR COMMUNITY" title="Make room for local talent." description="Post an opportunity with clear pay, hours and a precise location. Reach workers within your hiring radius."/><div className="posting-layout"><section className="paper">{done?<div className="success-panel" role="status"><Check size={40}/><h2>Your job is live.</h2><p>Nearby workers can now see it. A listing may not appear in your own search if your location is outside its hiring radius.</p><a className="button green" href="find-work.html">Browse nearby jobs <ArrowRight size={17}/></a><button className="text-button" onClick={()=>setDone(false)}>Post another job</button></div>:<PostForm onDone={()=>{setDone(true);window.scrollTo({top:0,behavior:'smooth'});}}/>}</section><aside className="posting-help"><span className="map-icon mint"><ShieldCheck/></span><h2>A clear listing is a good start.</h2><ol><li><strong>Describe the actual work.</strong><p>Include duties, experience and equipment needed.</p></li><li><strong>Be upfront about pay.</strong><p>Choose an hourly rate or a total amount for the whole job.</p></li><li><strong>Set the workplace location.</strong><p>Use on-site GPS or the workplace’s street address, not your current location if you’re elsewhere.</p></li><li><strong>Make contact easy.</strong><p>Use business contact details you’re happy to display publicly.</p></li></ol><a href="help.html">Need help? <ArrowRight size={15}/></a></aside></div></main>}
-function Detail(){const [location,setLocation]=useState<any>(null),[ready,setReady]=useState(false),[job,setJob]=useState<any>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[saved,setSaved]=useState(false);const id=new URLSearchParams(window.location.search).get('id');useEffect(()=>{try{const l=JSON.parse(localStorage.getItem('cw-location')||'null');if(l&&validLocation(l.lat,l.lon))setLocation(l);const ids=JSON.parse(localStorage.getItem('cw-saved-ids')||'[]');setSaved(ids.includes(id));}catch{}setReady(true);},[]);useEffect(()=>{if(!location||!id)return;setBusy(true);const abort=new AbortController();const p=new URLSearchParams({lat:String(location.lat),lon:String(location.lon),radius:localStorage.getItem('cw-radius')||'25',id});fetch(API+'?'+p,{signal:abort.signal}).then(async r=>{const d:any=await r.json();if(!r.ok)throw Error(d.error||'Unable to load job.');if(!d.jobs.length)throw Error('This job has expired, is outside its hiring radius, or is no longer available.');setJob(d.jobs[0]);setError('');}).catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setBusy(false)});return()=>abort.abort();},[location,id]);function save(){try{let ids:string[]=JSON.parse(localStorage.getItem('cw-saved-ids')||'[]');ids=saved?ids.filter(x=>x!==id):[...new Set([...ids,id!])];localStorage.setItem('cw-saved-ids',JSON.stringify(ids));setSaved(!saved);}catch{setError('Your browser could not save this job.');}}return <main className="page-shell detail-page"><a className="back-link" href="find-work.html"><ArrowLeft size={16}/>Back to jobs</a>{!id?<div className="paper"><h1>Choose a job first</h1><a href="find-work.html">Browse nearby jobs</a></div>:!ready||busy?<div className="paper" role="status">Loading job…</div>:!location?<div className="paper"><h2>Set your location to view this job</h2><p className="modal-intro">We check that the opportunity is within the poster’s hiring radius before showing the details.</p><LocationPicker onSelect={l=>{localStorage.setItem('cw-location',JSON.stringify(l));setLocation(l);}}/></div>:error?<div className="paper" role="alert"><h2>Job unavailable</h2><p>{error}</p><a className="button green" href="find-work.html">Find nearby work</a></div>:job?<><div className="page-head"><span className="eyebrow">{job.category.toUpperCase()} · {job.business}</span><h1>{job.title}</h1><p>{job.city}, {job.province}</p></div><div className="posting-layout"><section className="paper"><div className="detail-pay">{currency(job.pay)}<span> / {job.payType==='hour'?'hour':'job'}</span></div><p className="pay-explainer">{job.payType==='hour'?`${currency(job.pay*job.hours)} estimated for the shift`:`${currency(job.hourly)} equivalent per hour`}</p><div className="detail-stats"><span><Clock size={17}/>{job.hours} hours</span><span><Navigation size={17}/>{job.distance.toFixed(1)} km away</span></div><h3>About this job</h3><p className="full-description">{job.description}</p><h3>When & where</h3><p className="full-description">{new Date(job.start).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',dateStyle:'full',timeStyle:'short'})} SAST<br/>{job.city}, {job.province}<br/>Confirm the exact meeting address with the poster.</p><button className="button outline" onClick={save}><Bookmark size={16} fill={saved?'currentColor':'none'}/>{saved?'Saved · remove':'Save this job'}</button></section><aside className="paper contact-panel"><span className="map-icon mint"><Mail size={22}/></span><h2>Talk to the poster.</h2><p>Contact {job.business} to discuss the role and agree on the details.</p><div className="public-contact">{job.contact}</div><p className="info-box">Contacting a poster does not reserve a shift. Agree on the work, pay, hours and travel before committing. Payments are arranged directly.</p><a href="help.html#safety">Tips for finding work safely</a></aside></div></>:null}</main>}
-function Saved(){const [ids,setIds]=useState<string[]>([]);useEffect(()=>{try{setIds(JSON.parse(localStorage.getItem('cw-saved-ids')||'[]'));}catch{}},[]);return <main className="page-shell"><PageHead tag="YOUR SHORTLIST" title="Keep a good opportunity close." description="Saved jobs stay on this device. Availability and the poster’s hiring radius are checked again when you open a job."/>{!ids.length?<div className="empty-card"><Bookmark size={32}/><h3>No saved jobs yet.</h3><p>Open a job and select Save this job to keep it here.</p><a className="button green" href="find-work.html">Find work <ArrowRight size={17}/></a></div>:<div className="saved-list">{ids.map((id,i)=><div className="paper saved-item" key={id}><Bookmark size={20}/><div><h3>Saved opportunity {i+1}</h3><p>Open to check current details and availability.</p></div><a className="button green" href={'job.html?id='+encodeURIComponent(id)}>View job</a><button className="text-button" aria-label="Remove saved job" onClick={()=>{const next=ids.filter(x=>x!==id);setIds(next);localStorage.setItem('cw-saved-ids',JSON.stringify(next));}}><X size={18}/></button></div>)}</div>}</main>}
-function How(){return <main className="page-shell"><PageHead tag="A SIMPLE WAY TO CONNECT" title="Local work. Clear next steps." description="Community Work connects people with local opportunities throughout South Africa."/><div className="guide-grid"><section className="paper"><span className="map-icon mint"><Search/></span><h2>Looking for work?</h2><ol><li><strong>Set your location.</strong><p>Allow browser location or search for your city, suburb or address.</p></li><li><strong>Choose your radius.</strong><p>Use Filters to set your travel distance, type of work and minimum hourly pay. Closest comes first.</p></li><li><strong>Compare the details.</strong><p>Read the description, pay, hours and start time. Save jobs on your device.</p></li><li><strong>Contact the poster.</strong><p>Confirm availability, address and payment terms directly.</p></li></ol><a className="button green" href="find-work.html">Find work <ArrowRight size={16}/></a></section><section className="paper"><span className="map-icon peach"><Plus/></span><h2>Looking to hire?</h2><ol><li><strong>Describe the opportunity.</strong><p>List your title, responsibilities and any requirements.</p></li><li><strong>Set clear pay and hours.</strong><p>Enter pay in rand, select hourly or total pay, and choose the shift start time in SAST.</p></li><li><strong>Choose the hiring area.</strong><p>Set the exact work location and the maximum distance workers can be from it.</p></li><li><strong>Publish and connect.</strong><p>Nearby workers can view the listing and contact you using your public business details.</p></li></ol><a className="button dark" href="post-job.html">Post a job <Plus size={16}/></a></section></div><div className="info-box guide-note">Distance is a straight-line estimate. An area can be selected manually and is not identity verification. This version supports job discovery and direct contact; it does not book shifts or process wages.</div></main>}
-function About(){return <main className="page-shell"><PageHead tag="BUILT AROUND COMMUNITY" title="Opportunity shouldn’t feel far away." description="A place for South Africans to discover work nearby, and for local businesses and individuals to find people in their area."/><div className="guide-grid"><section className="paper"><h2>Every city. Every town.</h2><p className="full-description">Our location-based search supports communities across all nine provinces. You can enter any city or town when posting. Search uses the job’s coordinates, so opportunities don’t have to be in a preset list of major cities.</p><a className="button green" href="find-work.html">Explore nearby work</a></section><section className="paper"><h2>Clear from the start.</h2><p className="full-description">Every listing includes a description, pay, hours and location. Workers can compare opportunities before contacting a poster, and posters can set a hiring radius around the workplace.</p><p className="info-box">We’re an early-stage listing platform. We do not claim verified business partnerships or guarantee employment.</p></section></div></main>}
-function Help(){return <main className="page-shell reading"><PageHead tag="HELP & GUIDANCE" title="A little help along the way." description="Answers for workers and job posters."/>{[['Why am I seeing no jobs?','There may be no upcoming listings within your radius, or your filters may be too narrow. Increase your radius or clear filters. The poster’s hiring radius still applies.'],['My location isn’t working.','Allow location in your browser settings and retry. You can also search by city, suburb or street address. The site currently searches mainland South African coordinates.'],['How is distance calculated?','We calculate straight-line distance between your selected location and the workplace. Travel time and road distance may be longer.'],['How do hourly and total pay work?','Hourly pay is multiplied by the advertised hours to show an estimated shift total. Total-job pay is divided by hours when filtering or sorting by hourly pay.'],['What time zone do listings use?','All job start times use South Africa Standard Time (SAST, UTC+02:00).'],['Does posting create an employment agreement?','No. The poster and worker must directly agree on the role, availability, terms and payment. The platform does not book shifts or handle payroll.'],['How can I request a correction or report a problem?','Use the project issue tracker linked below for technical problems. Do not post bank details, identity documents, private addresses or other sensitive information in a public issue. Listing editing and a private support channel are not available yet.']].map(([q,a])=><details className="faq" key={q}><summary>{q}</summary><p>{a}</p></details>)}<section className="paper" id="safety"><h2>Before you agree to work</h2><p className="full-description">Confirm who is hiring, the exact workplace, duties, hours and pay. Do not share bank login details or identity documents through public job descriptions. Do not pay a stranger to secure a job. If something feels wrong, pause and verify the opportunity independently.</p><a className="button outline" href="https://github.com/Zayaiken21/South-Africa-Community-Work/issues" target="_blank" rel="noreferrer">Report a technical issue</a></section></main>}
-function Privacy(){return <main className="page-shell reading"><PageHead tag="PRIVACY INFORMATION" title="Know what you share." description="How this version uses information. Updated 20 October 2026."/><section className="paper prose"><h2>Location and searches</h2><p>Your selected location is saved in your browser on this device. Search requests send coordinates and filters to the hosted job API to calculate nearby listings. The application does not store worker GPS history in its jobs database. Hosting services may retain operational logs.</p><h2>Job listings</h2><p>When you publish, the job title, description, poster name, city, province, workplace coordinates, category, pay, hours, hiring radius, start time and contact details are stored in a shared database. Matching users can receive these listing details. Only publish contact details and workplace information you are authorized to share.</p><h2>Saved jobs and service providers</h2><p>Saved job identifiers and your preferred location are stored on this device. GitHub Pages hosts the frontend and a Cloudflare-backed service hosts the API and database. Typed place searches are sent to Photon (Komoot) to find matching South African places, using OpenStreetMap data. Fonts are loaded from Google Fonts. These services receive the network information required to deliver their services.</p><h2>Control your device data</h2><button className="button outline" onClick={()=>{localStorage.removeItem('cw-location');localStorage.removeItem('cw-saved-ids');alert('Saved location and saved-job IDs cleared from this device.');}}>Clear my saved location and jobs</button><p>This clears local browser preferences only. It does not remove published job listings. A dedicated private support and data-request process is not available yet; do not submit sensitive documents or banking information.</p></section></main>}
-function Terms(){return <main className="page-shell reading"><PageHead tag="PLATFORM TERMS" title="Clear expectations for everyone." description="Basic conditions for using this early-access listing platform. Updated 20 October 2026."/><section className="paper prose"><h2>Job discovery and direct contact</h2><p>Community Work displays local job opportunities. Listing a job or viewing one does not create a booking, employment contract or payment guarantee. Posters and workers are responsible for confirming the details and making their own arrangements.</p><h2>Accurate and authorized listings</h2><p>Post only genuine opportunities you are authorized to advertise. Clearly describe duties, pay, hours and location. Do not publish misleading, unlawful, discriminatory or abusive content, or another person’s private information without authorization.</p><h2>Location and availability</h2><p>Distance estimates use supplied coordinates and are not a guarantee of travel time, attendance or identity. Expired listings are excluded from searches. Availability can change before a poster updates the information.</p><h2>Payments and disputes</h2><p>This version does not collect payments, hold funds, issue wages or impose monetary penalties. Confirm payment terms directly with the poster. Employers remain responsible for applicable employment obligations. Disputes are not adjudicated by this platform.</p><h2>Early access</h2><p>Accounts, verified employer status, shift booking, listing management and a dedicated support process are not yet available. Verify opportunities independently and avoid sharing sensitive personal or financial information.</p></section></main>}
+import {
+  MapPin, Clock, Navigation, ArrowRight, ArrowLeft, Plus, Check, Bookmark, Search, ShieldCheck, Mail, Globe,
+  BriefcaseBusiness, House, Menu, Download, Info, CircleHelp, Lock, FileText, ArrowUpRight, X, Users, Laptop,
+} from 'lucide-react';
+import JobsView, {LocationPicker, PostForm, Sheet, useAreaLocation} from './JobsView';
+import {API, money, savedJobs, setSavedJobs, toggleSaved, type CommunityJob, type SavedJob} from './catalog';
+import './app.css';
+
+const file = window.location.pathname.split('/').pop() || 'index.html';
+const mode = new URLSearchParams(window.location.search).get('mode');
+
+// ---------- Install as an app (Android / desktop Chrome) ----------
+
+let deferredPrompt: any = null;
+const installListeners = new Set<() => void>();
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; installListeners.forEach(f => f()); });
+window.addEventListener('appinstalled', () => { deferredPrompt = null; installListeners.forEach(f => f()); });
+function useInstall() {
+  const [, force] = useState(0);
+  useEffect(() => { const f = () => force(n => n + 1); installListeners.add(f); return () => { installListeners.delete(f); }; }, []);
+  return deferredPrompt ? async () => { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; force(n => n + 1); } : null;
+}
+
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+
+// ---------- Shell ----------
+
+function App() {
+  const [more, setMore] = useState(false);
+  const install = useInstall();
+  const tab = file === 'index.html' ? 'home' : file === 'find-work.html' ? (mode === 'remote' ? 'online' : 'jobs') : file === 'post-job.html' ? 'post' : file === 'saved-jobs.html' ? 'saved' : 'more';
+  return (
+    <>
+      <header className="topbar">
+        <a className="brand" href="index.html" aria-label="Community Work South Africa home">
+          <Logo/><span>community<b>work</b><small>SOUTH AFRICA</small></span>
+        </a>
+        <nav className="topnav" aria-label="Main">
+          <a className={tab === 'jobs' || tab === 'home' ? 'on' : ''} href="find-work.html">Find work</a>
+          <a className={tab === 'online' ? 'on' : ''} href="find-work.html?mode=remote">Online jobs</a>
+          <a className={tab === 'saved' ? 'on' : ''} href="saved-jobs.html">Saved</a>
+          <a href="how-it-works.html">How it works</a>
+        </nav>
+        <div className="top-actions">
+          {install && <button className="btn btn-outline btn-sm hide-sm" onClick={install}><Download size={16}/>Install app</button>}
+          <a className="btn btn-primary btn-sm hide-sm" href="post-job.html"><Plus size={16}/>Post a job</a>
+          <button className="icon-btn show-sm" aria-label="More" onClick={() => setMore(true)}><Menu size={22}/></button>
+        </div>
+      </header>
+
+      <main className="app-main">
+        {file === 'index.html' ? <JobsView welcome/>
+          : file === 'find-work.html' ? <JobsView/>
+          : file === 'post-job.html' ? <PostPage/>
+          : file === 'job.html' ? <Detail/>
+          : file === 'saved-jobs.html' ? <Saved/>
+          : file === 'how-it-works.html' ? <How/>
+          : file === 'about.html' ? <About/>
+          : file === 'help.html' ? <Help/>
+          : file === 'privacy.html' ? <Privacy/>
+          : file === 'terms.html' ? <Terms/>
+          : file === 'offline.html' ? <Offline/>
+          : <NotFound/>}
+      </main>
+
+      <footer className="site-footer">
+        <div><a className="brand small" href="index.html"><Logo/><span>community<b>work</b></span></a><p>Opportunity starts in your community.</p></div>
+        <nav aria-label="Footer">
+          <a href="find-work.html">Find work</a><a href="find-work.html?mode=remote">Online jobs</a><a href="post-job.html">Post a job</a>
+          <a href="how-it-works.html">How it works</a><a href="about.html">About</a><a href="help.html">Help</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a>
+        </nav>
+        <small>South Africa · All nine provinces</small>
+      </footer>
+
+      <nav className="tabbar" aria-label="App">
+        <a className={tab === 'home' || tab === 'jobs' ? 'on' : ''} href="index.html"><House size={22}/><span>Jobs</span></a>
+        <a className={tab === 'online' ? 'on' : ''} href="find-work.html?mode=remote"><Globe size={22}/><span>Online</span></a>
+        <a className={'post' + (tab === 'post' ? ' on' : '')} href="post-job.html"><span className="post-fab"><Plus size={24}/></span><span>Post</span></a>
+        <a className={tab === 'saved' ? 'on' : ''} href="saved-jobs.html"><Bookmark size={22}/><span>Saved</span></a>
+        <button className={tab === 'more' ? 'on' : ''} onClick={() => setMore(true)}><Menu size={22}/><span>More</span></button>
+      </nav>
+
+      {more && (
+        <Sheet title="More" onClose={() => setMore(false)}>
+          <div className="menu-list">
+            {install && <button onClick={() => { setMore(false); install(); }}><Download size={20}/>Install the app</button>}
+            <a href="how-it-works.html"><BriefcaseBusiness size={20}/>How it works</a>
+            <a href="about.html"><Info size={20}/>About</a>
+            <a href="help.html"><CircleHelp size={20}/>Help & safety</a>
+            <a href="privacy.html"><Lock size={20}/>Privacy</a>
+            <a href="terms.html"><FileText size={20}/>Terms</a>
+          </div>
+        </Sheet>
+      )}
+    </>
+  );
+}
+
+function Logo() {
+  return <span className="logo" aria-hidden><i/><i/><i/><i/></span>;
+}
+
+function PageHead({tag, title, description}: {tag: string; title: string; description?: string}) {
+  return <div className="page-head"><p className="overline">{tag}</p><h1>{title}</h1>{description && <p className="lede">{description}</p>}</div>;
+}
+
+// ---------- Pages ----------
+
+function PostPage() {
+  const [done, setDone] = useState(false);
+  return (
+    <div className="page">
+      <PageHead tag="Hire in your community" title="Post a job" description="Clear pay, hours and a precise location. Workers in your hiring area see it first."/>
+      <div className="split">
+        <section className="card-panel">
+          {done ? (
+            <div className="success" role="status">
+              <span className="success-icon"><Check size={30}/></span>
+              <h2>Your job is live</h2>
+              <p>Workers within your hiring radius can now see it and contact you.</p>
+              <a className="btn btn-primary" href="find-work.html">Browse jobs <ArrowRight size={17}/></a>
+              <button className="btn btn-outline" onClick={() => setDone(false)}>Post another job</button>
+            </div>
+          ) : <PostForm onDone={() => { setDone(true); window.scrollTo({top: 0, behavior: 'smooth'}); }}/>}
+        </section>
+        <aside className="tips">
+          <ShieldCheck size={22}/>
+          <h2>A clear post gets better replies</h2>
+          <ol>
+            <li><strong>Describe the real work.</strong> Duties, experience and equipment.</li>
+            <li><strong>Be upfront about pay.</strong> Hourly or a total for the job.</li>
+            <li><strong>Pin the workplace.</strong> Use the street address, not where you are now.</li>
+            <li><strong>Make contact easy.</strong> A business number or email you’re happy to share.</li>
+          </ol>
+          <a className="link" href="help.html">Need help? <ArrowRight size={15}/></a>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function Detail() {
+  const id = new URLSearchParams(window.location.search).get('id');
+  const {location, locating, choose} = useAreaLocation();
+  const [job, setJob] = useState<CommunityJob | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(() => savedJobs().some(s => s.key === 'community:' + id));
+
+  useEffect(() => {
+    if (!location || !id) return;
+    setBusy(true);
+    const ctrl = new AbortController();
+    const p = new URLSearchParams({lat: String(location.lat), lon: String(location.lon), radius: '200', id});
+    fetch(API + '?' + p, {signal: ctrl.signal})
+      .then(async r => {
+        const d: any = await r.json();
+        if (!r.ok) throw Error(d.error || 'Unable to load job.');
+        if (!d.jobs.length) throw Error('This job has ended, is outside its hiring area for your location, or was removed.');
+        setJob(d.jobs[0]); setError('');
+      })
+      .catch(e => { if (!ctrl.signal.aborted) setError(e.message); })
+      .finally(() => { if (!ctrl.signal.aborted) setBusy(false); });
+    return () => ctrl.abort();
+  }, [location, id]);
+
+  const save = () => job && setSaved(toggleSaved({key: 'community:' + job.id, title: job.title, company: job.business, place: `${job.city}, ${job.province}`, href: 'job.html?id=' + encodeURIComponent(job.id), external: false, mode: 'onsite'}));
+
+  return (
+    <div className="page">
+      <a className="back" href="find-work.html"><ArrowLeft size={17}/>Back to jobs</a>
+      {!id ? <div className="card-panel"><h1>Choose a job first</h1><a className="btn btn-primary" href="find-work.html">Browse jobs</a></div>
+        : locating || busy ? <div className="card-panel center" role="status"><span className="spinner"/>Loading job…</div>
+        : !location ? <div className="card-panel narrow"><h2>Choose your area to view this job</h2><p className="muted">Posters hire within a set distance, so we check you’re in range first.</p><LocationPicker onSelect={choose}/></div>
+        : error ? <div className="card-panel narrow" role="alert"><h2>Job unavailable</h2><p className="muted">{error}</p><a className="btn btn-primary" href="find-work.html">Find other work</a></div>
+        : job ? (
+          <>
+            <div className="page-head">
+              <p className="overline">{job.category} · Community post</p>
+              <h1>{job.title}</h1>
+              <p className="lede">{job.business} · {job.city}, {job.province}</p>
+            </div>
+            <div className="split">
+              <section className="card-panel">
+                <div className="big-pay">{money(job.pay)}<span> / {job.payType === 'hour' ? 'hour' : 'job'}</span></div>
+                <p className="muted">{job.payType === 'hour' ? `About ${money(job.pay * job.hours)} for the shift` : `About ${money(job.hourly)} per hour`}</p>
+                <div className="stat-row">
+                  <span><Clock size={17}/>{job.hours} hours</span>
+                  <span><Navigation size={17}/>{job.distance.toFixed(1)} km away</span>
+                  <span><MapPin size={17}/>{job.city}</span>
+                </div>
+                <h3>About this job</h3>
+                <p className="prose-text">{job.description}</p>
+                <h3>When</h3>
+                <p className="prose-text">{new Date(job.start).toLocaleString('en-ZA', {timeZone: 'Africa/Johannesburg', dateStyle: 'full', timeStyle: 'short'})} SAST</p>
+                <button className={'btn ' + (saved ? 'btn-dark' : 'btn-outline')} onClick={save}><Bookmark size={16} fill={saved ? 'currentColor' : 'none'}/>{saved ? 'Saved' : 'Save job'}</button>
+              </section>
+              <aside className="card-panel contact">
+                <Mail size={22}/>
+                <h2>Contact {job.business}</h2>
+                <p className="contact-value">{job.contact}</p>
+                <p className="hint-box">Contacting the poster doesn’t book the shift. Agree on the work, pay, hours and exact address first.</p>
+                <a className="link" href="help.html#safety">Tips for staying safe</a>
+              </aside>
+            </div>
+          </>
+        ) : null}
+    </div>
+  );
+}
+
+function Saved() {
+  const [list, setList] = useState<SavedJob[]>(() => savedJobs());
+  useEffect(() => { const f = () => setList(savedJobs()); window.addEventListener('cw-saved', f); return () => window.removeEventListener('cw-saved', f); }, []);
+  const remove = (key: string) => setSavedJobs(list.filter(s => s.key !== key));
+  return (
+    <div className="page">
+      <PageHead tag="Your shortlist" title="Saved jobs" description="Saved on this device. Open a job to check it’s still available."/>
+      {!list.length ? (
+        <div className="empty">
+          <div className="empty-icon"><Bookmark size={28}/></div>
+          <h2>Nothing saved yet</h2>
+          <p>Tap the bookmark on any job to keep it here.</p>
+          <a className="btn btn-primary" href="find-work.html">Find work <ArrowRight size={17}/></a>
+        </div>
+      ) : (
+        <div className="saved-list">
+          {list.map(s => (
+            <div className="saved-row" key={s.key}>
+              <span className={'avatar ' + s.mode}>{s.mode === 'remote' ? <Globe size={18}/> : <MapPin size={18}/>}</span>
+              <a href={s.href} {...(s.external ? {target: '_blank', rel: 'noopener noreferrer nofollow'} : {})}>
+                <strong>{s.title}</strong>
+                <span>{[s.company, s.place].filter(Boolean).join(' · ') || 'Open to see the details'}</span>
+              </a>
+              <button className="icon-btn" aria-label={'Remove ' + s.title} onClick={() => remove(s.key)}><X size={18}/></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function How() {
+  return (
+    <div className="page">
+      <PageHead tag="How it works" title="Local work. Clear next steps." description="Three kinds of jobs in one place: community shifts, in-person jobs across South Africa, and online work."/>
+      <div className="three">
+        <div className="feature"><Users size={22}/><h3>Community posts</h3><p>Shifts posted here by local businesses and people, shown to workers within the poster’s hiring area.</p></div>
+        <div className="feature"><MapPin size={22}/><h3>In person across SA</h3><p>Jobs from employers around the country, sorted by how close they are to you.</p></div>
+        <div className="feature"><Laptop size={22}/><h3>Online jobs</h3><p>Remote roles open to people in South Africa. Apply on the original job site.</p></div>
+      </div>
+      <div className="split even">
+        <section className="card-panel">
+          <Search size={22}/>
+          <h2>Looking for work</h2>
+          <ol className="steps">
+            <li><strong>Your area is found for you.</strong> Allow location, or tap your city. Change it any time.</li>
+            <li><strong>Pick a distance and type of work.</strong> Closest jobs come first.</li>
+            <li><strong>Compare pay, hours and place.</strong> Save the ones you like.</li>
+            <li><strong>Make contact.</strong> Call the poster, or apply on the job site for listings from other boards.</li>
+          </ol>
+          <a className="btn btn-primary" href="find-work.html">Find work <ArrowRight size={16}/></a>
+        </section>
+        <section className="card-panel">
+          <Plus size={22}/>
+          <h2>Looking to hire</h2>
+          <ol className="steps">
+            <li><strong>Describe the job.</strong> Title, duties and what’s needed.</li>
+            <li><strong>Set pay and hours.</strong> In rand, hourly or for the whole job.</li>
+            <li><strong>Pin the workplace and hiring distance.</strong></li>
+            <li><strong>Publish.</strong> Nearby workers contact you directly.</li>
+          </ol>
+          <a className="btn btn-dark" href="post-job.html">Post a job <Plus size={16}/></a>
+        </section>
+      </div>
+      <p className="hint-box">Distances are straight-line estimates. This app helps you find and contact jobs; it doesn’t book shifts or handle wages.</p>
+    </div>
+  );
+}
+
+function About() {
+  return (
+    <div className="page">
+      <PageHead tag="About" title="Opportunity shouldn’t feel far away." description="A place for South Africans to find work nearby or online, and for local businesses to find people in their area."/>
+      <div className="split even">
+        <section className="card-panel"><h2>Every city. Every town.</h2><p className="prose-text">Search works in all nine provinces. Community posts use the workplace’s exact position, so towns don’t need to be on a preset list. In-person and online listings from established job boards fill the gaps while local posts grow.</p><a className="btn btn-primary" href="find-work.html">Explore jobs</a></section>
+        <section className="card-panel"><h2>Clear from the start.</h2><p className="prose-text">Community posts show pay, hours and location up front. Listings from other job boards link to the original advert, where you apply.</p><p className="hint-box">We’re an early-stage platform. We don’t claim business partnerships or guarantee employment.</p></section>
+      </div>
+    </div>
+  );
+}
+
+const faqs: [string, string][] = [
+  ['How does the app find my area?', 'When you open it, the app asks your phone or browser for your location. If that’s blocked, slow or outside South Africa, it estimates your area from your network. You can always tap your area at the top to choose a city or search an address.'],
+  ['My location isn’t working.', 'Allow location for this site or app in your phone settings, then tap “Use my current location”. Or just tap your city — that works without GPS.'],
+  ['Where do the online and in-person jobs come from?', 'Besides community posts, listings come from public job boards such as Adzuna, Remotive, Jobicy and Himalayas. Tap Apply to open the original advert and apply there. Listings refresh several times a day.'],
+  ['Why am I seeing no jobs?', 'Your filters may be too narrow. Choose “Anywhere in SA”, clear the category or search, and check the In person and Online tabs.'],
+  ['How is distance calculated?', 'It’s the straight-line distance between your area and the workplace. Travel by road will be longer.'],
+  ['How do hourly and total pay work?', 'Hourly pay is multiplied by the hours to estimate the shift total. Total-job pay is divided by the hours when filtering by hourly pay.'],
+  ['Does posting create an employment agreement?', 'No. The poster and worker agree on the work, terms and payment directly.'],
+  ['How do I report a problem?', 'Use the issue tracker below for technical problems. Don’t post bank details, ID documents or private addresses in a public issue.'],
+];
+
+function Help() {
+  return (
+    <div className="page reading">
+      <PageHead tag="Help & safety" title="A little help along the way."/>
+      {faqs.map(([q, a]) => <details className="faq" key={q}><summary>{q}</summary><p>{a}</p></details>)}
+      <section className="card-panel" id="safety">
+        <ShieldCheck size={22}/>
+        <h2>Before you agree to work</h2>
+        <p className="prose-text">Confirm who is hiring, the exact workplace, duties, hours and pay. Never pay anyone to get a job, and never share bank logins or ID documents through a job ad. If something feels wrong, stop and check the employer independently.</p>
+        <a className="btn btn-outline" href="https://github.com/Zayaiken21/South-Africa-Community-Work/issues" target="_blank" rel="noreferrer">Report a technical issue <ArrowUpRight size={15}/></a>
+      </section>
+    </div>
+  );
+}
+
+function Privacy() {
+  const [cleared, setCleared] = useState(false);
+  return (
+    <div className="page reading">
+      <PageHead tag="Privacy" title="Know what you share." description="How this version uses information. Updated 20 October 2026."/>
+      <section className="card-panel prose">
+        <h2>Your location</h2>
+        <p>When you open the app it asks your device for your location to show nearby jobs. If location is blocked or unavailable, it estimates your area from your internet connection using GeoJS or ipapi. Your chosen area is saved on this device. Searches send coordinates to our jobs service to calculate distances. We don’t keep a history of your location.</p>
+        <h2>Job listings</h2>
+        <p>When you post a job, its title, description, poster name, city, province, workplace position, category, pay, hours, hiring radius, start time and contact details are stored and shown to workers in range. Only publish details you’re allowed to share.</p>
+        <h2>Listings from other job boards</h2>
+        <p>In-person and online listings come from public job boards (Adzuna, Remotive, Jobicy, Himalayas). When you tap Apply you leave this app, and that site’s own privacy policy applies.</p>
+        <h2>Service providers</h2>
+        <p>GitHub Pages hosts the app. A Cloudflare-backed service hosts the community jobs database. Place search and place names use Photon (Komoot) with OpenStreetMap data. These services receive the network information needed to work.</p>
+        <h2>Your device data</h2>
+        <p>Saved jobs and your area stay on this device. You can clear them here. This doesn’t remove published job listings.</p>
+        <button className="btn btn-outline" onClick={() => { try { ['cw-location', 'cw-saved-ids', 'cw-saved-jobs', 'cw-radius', 'cw-radius-v2'].forEach(k => localStorage.removeItem(k)); } catch { /* ignore */ } setCleared(true); }}>
+          {cleared ? <><Check size={16}/>Cleared</> : 'Clear my saved area and jobs'}
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function Terms() {
+  return (
+    <div className="page reading">
+      <PageHead tag="Terms" title="Clear expectations for everyone." description="Basic conditions for using this early-access platform. Updated 20 October 2026."/>
+      <section className="card-panel prose">
+        <h2>Finding work and contacting posters</h2>
+        <p>Community Work shows job opportunities. Viewing or posting a job doesn’t create a booking, employment contract or payment guarantee. Posters and workers confirm details and make their own arrangements.</p>
+        <h2>Listings from other job boards</h2>
+        <p>Some listings come from third-party job boards and link to the original advert. We don’t control or verify them; apply and check the employer on the original site.</p>
+        <h2>Accurate and authorised posts</h2>
+        <p>Post only genuine jobs you’re allowed to advertise, with honest duties, pay, hours and location. No misleading, unlawful, discriminatory or abusive content, and no one else’s private information.</p>
+        <h2>Location and availability</h2>
+        <p>Distances use supplied coordinates and don’t guarantee travel time or identity. Jobs can be filled or change before a listing is updated.</p>
+        <h2>Payments and disputes</h2>
+        <p>This app doesn’t collect payments, hold funds or pay wages. Confirm payment terms directly. Employers remain responsible for their employment obligations.</p>
+      </section>
+    </div>
+  );
+}
+
+function Offline() {
+  return <div className="page"><div className="empty"><div className="empty-icon"><Globe size={28}/></div><h2>You’re offline</h2><p>Connect to the internet to load the latest jobs. Your saved jobs are still on this device.</p><a className="btn btn-primary" href="saved-jobs.html">Open saved jobs</a></div></div>;
+}
+
+function NotFound() {
+  return <div className="page"><div className="empty"><h2>Page not found</h2><a className="btn btn-primary" href="index.html">Back to jobs</a></div></div>;
+}
+
 createRoot(document.getElementById('root')!).render(<App/>);
