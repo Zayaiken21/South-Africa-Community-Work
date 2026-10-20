@@ -22,7 +22,10 @@ import {placeFor} from './sa-places.mjs';
 
 const OUT = process.env.OUT_DIR || 'jobs-data/jobs';
 const UA = 'CommunityWorkSA/1.0 (+https://github.com/Zayaiken21/South-Africa-Community-Work)';
-const JOOBLE_CALLS = Number(process.env.JOOBLE_CALLS_PER_RUN || 12);
+// Jooble keys come with a fixed number of requests (500 by default), so calls are counted across runs:
+// one call per field on the first run, then a few per run so the allowance lasts about a month.
+const JOOBLE_LIMIT = Number(process.env.JOOBLE_TOTAL_LIMIT || 500);
+const JOOBLE_CALLS = Number(process.env.JOOBLE_CALLS_PER_RUN || 2);
 const KEEP_DAYS = {onsite: 30, remote: 45};
 const CAP = {latest: 1500, category: 4000, province: 4000, remote: 4000};
 
@@ -93,32 +96,57 @@ function located(location, lat, lon) {
 
 // ---------- In person (South Africa) ----------
 
+// Search word per field (single strong terms match more listings than phrases).
+const joobleWords = {
+  'Hospitality': 'hospitality', 'Retail': 'retail', 'Cleaning': 'cleaner', 'Warehouse & logistics': 'warehouse', 'Driving & delivery': 'driver',
+  'Construction': 'construction', 'Engineering': 'engineer', 'Manufacturing': 'production', 'Mining': 'mining', 'Agriculture': 'farm',
+  'Security': 'security officer', 'Events': 'events', 'Admin & office': 'administrator', 'Customer service': 'customer service',
+  'Sales & marketing': 'sales', 'Creative & design': 'designer', 'Tech & IT': 'IT', 'Healthcare': 'nurse', 'Education': 'teacher',
+  'Finance': 'accountant', 'HR & recruitment': 'HR', 'Legal': 'legal',
+};
+
 async function jooble(state) {
   const key = process.env.JOOBLE_API_KEY;
   if (!key) { console.log('Jooble: skipped — add a JOOBLE_API_KEY secret for more South African jobs'); return null; }
-  const words = fields.filter(f => f !== 'Other').map(f => f.replace(' & ', ' ').replace('Tech IT', 'IT'));
-  let cursor = state.joobleCursor || 0;
+  if (state.joobleLimit !== JOOBLE_LIMIT) { state.joobleLimit = JOOBLE_LIMIT; }      // a raised limit (repo variable) takes effect at once
+  if ((state.joobleBlockedAt || 0) > Date.now() - 864e5) { console.log('Jooble: paused for a day after the key was refused'); return null; }
+  const used = state.joobleUsed || 0, left = JOOBLE_LIMIT - 5 - used;                 // keep a few in reserve
+  if (left <= 0) { console.log(`Jooble: allowance used (${used} of ${JOOBLE_LIMIT}). Ask Jooble for more, then set the JOOBLE_TOTAL_LIMIT repo variable.`); return null; }
+  const fieldsList = Object.keys(joobleWords);
+  const budget = Math.min(left, used === 0 ? fieldsList.length : JOOBLE_CALLS);    // first run: one call per field
+  let cursor = state.joobleCursor || 0, made = 0;
   const jobs = [];
-  for (let i = 0; i < JOOBLE_CALLS; i++) {
-    const keywords = i === 0 ? '' : words[(cursor++) % words.length];
-    const d = await getJson(`https://jooble.org/api/${encodeURIComponent(key)}`, {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({keywords, location: 'South Africa', page: 1, ResultOnPage: 50}),
-    });
-    for (const j of d.jobs || []) {
+  for (let i = 0; i < budget; i++) {
+    const field = fieldsList[cursor % fieldsList.length];
+    cursor++;
+    state.joobleUsed = (state.joobleUsed || 0) + 1; made++;
+    let d;
+    try {
+      d = await getJson(`https://jooble.org/api/${encodeURIComponent(key)}`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({keywords: joobleWords[field], location: 'South Africa', page: 1, ResultOnPage: 50}),
+      });
+    } catch (e) {
+      console.warn(`Jooble: call failed — ${e.message}`);
+      if (/\b(401|403|429)\b/.test(e.message)) { state.joobleBlockedAt = Date.now(); break; }
+      continue;
+    }
+    for (const j of d?.jobs || []) {
       const title = strip(j.title), where = strip(j.location) || 'South Africa';
       const remote = /remote|work from home|wfh/i.test(`${title} ${where} ${j.type || ''}`);
       const pos = remote ? {} : located(where);
+      const guessed = categorize(title);
       jobs.push({
         id: 'jooble:' + (j.id || j.link), source: 'Jooble', sourceUrl: 'https://za.jooble.org', url: j.link, title,
         company: strip(j.company) || strip(j.source) || 'Employer', mode: remote ? 'remote' : 'onsite',
         location: remote ? 'South Africa (remote)' : where, province: pos.province, lat: pos.lat, lon: pos.lon,
-        category: categorize(title, keywords), type: strip(j.type) || undefined, salary: strip(j.salary) || undefined,
+        category: guessed === 'Other' ? field : guessed, type: strip(j.type) || undefined, salary: strip(j.salary) || undefined,
         posted: iso(j.updated) || new Date().toISOString(), excerpt: excerpt(j.snippet),
       });
     }
   }
-  state.joobleCursor = cursor % words.length;
+  state.joobleCursor = cursor % fieldsList.length;
+  console.log(`Jooble: ${made} calls this run, ${state.joobleUsed} of ${JOOBLE_LIMIT} used in total`);
   return jobs;
 }
 

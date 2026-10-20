@@ -45,6 +45,9 @@ jobs:
         env:
           OUT_DIR: jobs-data/jobs
           JOOBLE_API_KEY: ${{ secrets.JOOBLE_API_KEY }}
+          # Jooble's request allowance. Raise these as repo variables if Jooble gives you more.
+          JOOBLE_TOTAL_LIMIT: ${{ vars.JOOBLE_TOTAL_LIMIT || '500' }}
+          JOOBLE_CALLS_PER_RUN: ${{ vars.JOOBLE_CALLS_PER_RUN || '2' }}
         run: node scripts/fetch-jobs.mjs
 
       - name: Publish to the jobs-data branch
