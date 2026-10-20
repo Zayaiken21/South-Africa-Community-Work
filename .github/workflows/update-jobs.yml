@@ -49,6 +49,7 @@ jobs:
           # Jooble's request allowance. Raise these as repo variables if Jooble gives you more.
           JOOBLE_TOTAL_LIMIT: ${{ vars.JOOBLE_TOTAL_LIMIT || '500' }}
           JOOBLE_CALLS_PER_RUN: ${{ vars.JOOBLE_CALLS_PER_RUN || '2' }}
+          JOOBLE_HOST: ${{ vars.JOOBLE_HOST || 'za.jooble.org' }}
         run: node scripts/fetch-jobs.mjs
 
       - name: Publish to the jobs-data branch

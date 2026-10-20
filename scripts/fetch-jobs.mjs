@@ -26,6 +26,8 @@ const UA = 'CommunityWorkSA/1.0 (+https://github.com/Zayaiken21/South-Africa-Com
 // one call per field on the first run, then a few per run so the allowance lasts about a month.
 const JOOBLE_LIMIT = Number(process.env.JOOBLE_TOTAL_LIMIT || 500);
 const JOOBLE_CALLS = Number(process.env.JOOBLE_CALLS_PER_RUN || 2);
+// Jooble picks the country from the host: jooble.org searches the USA. South Africa is za.jooble.org.
+const JOOBLE_HOST = process.env.JOOBLE_HOST || 'za.jooble.org';
 const KEEP_DAYS = {onsite: 30, remote: 45};
 const CAP = {latest: 1500, category: 4000, province: 4000, remote: 4000};
 
@@ -96,6 +98,13 @@ function located(location, lat, lon) {
 
 // ---------- In person (South Africa) ----------
 
+const US_PLACE = /,\s*[A-Z]{2}$|\b(united states|usa|u\.s\.)\b/i;
+function isSouthAfrican(location) {
+  const t = String(location || '');
+  if (!t || US_PLACE.test(t)) return false;
+  return /south africa|\bza\b/i.test(t) || !!placeFor(t);
+}
+
 // Search word per field (single strong terms match more listings than phrases).
 const joobleWords = {
   'Hospitality': 'hospitality', 'Retail': 'retail', 'Cleaning': 'cleaner', 'Warehouse & logistics': 'warehouse', 'Driving & delivery': 'driver',
@@ -134,7 +143,7 @@ async function jooble(state) {
     state.joobleUsed = (state.joobleUsed || 0) + 1; made++;
     let d;
     try {
-      d = await getJson(`https://jooble.org/api/${encodeURIComponent(key)}`, {
+      d = await getJson(`https://${JOOBLE_HOST}/api/${encodeURIComponent(key)}`, {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({keywords: joobleWords[field], location: place, page, ResultOnPage: 50}),
       });
@@ -147,11 +156,14 @@ async function jooble(state) {
     pageSize = Math.max(pageSize, found.length);
     // A full page means there are probably more: queue the next page of the same search.
     if (boosting && found.length && found.length >= pageSize && page < 20) queue.push([field, place, page + 1]);
+    let foreign = 0;
     for (const j of found) {
-      const title = strip(j.title), where = strip(j.location) || place;
+      const title = strip(j.title), raw = strip(j.location);
+      // Only keep listings whose own location is in South Africa (a US result for "North West" must never pass).
+      if (!isSouthAfrican(raw)) { foreign++; continue; }
+      const where = raw;
       const remote = /remote|work from home|wfh/i.test(`${title} ${where} ${j.type || ''}`);
-      let pos = remote ? {} : located(where);
-      if (!remote && !pos.province && place !== 'South Africa') pos = {...located(place), province: place};
+      const pos = remote ? {} : located(where);
       const guessed = categorize(title);
       jobs.push({
         id: 'jooble:' + (j.id || j.link), source: 'Jooble', sourceUrl: 'https://za.jooble.org', url: j.link, title,
@@ -161,6 +173,8 @@ async function jooble(state) {
         posted: iso(j.updated) || new Date().toISOString(), excerpt: excerpt(j.snippet),
       });
     }
+    if (foreign) console.warn(`Jooble: dropped ${foreign} of ${found.length} results outside South Africa for "${joobleWords[field]}" in ${place}`);
+    if (made === 1 && found.length && foreign === found.length) { console.warn('Jooble: first search returned only foreign jobs — stopping to save the allowance. Check JOOBLE_HOST.'); break; }
     if (boosting) await new Promise(r => setTimeout(r, Number(process.env.JOOBLE_DELAY_MS ?? 400)));
   }
   if (boosting) state.joobleBoostDone = boost.id;
@@ -289,6 +303,7 @@ for (const s of sources) {
 const now = Date.now(), seen = new Set();
 let jobs = [...all.values()]
   .filter(j => j.source !== 'Adzuna')
+  .filter(j => j.source !== 'Jooble' || (j.location !== 'South Africa (remote)' && isSouthAfrican(j.location)))
   .map(j => ({...j, category: fields.includes(j.category) ? j.category : categorize(j.title)}))
   .filter(j => now - Date.parse(j.posted) < KEEP_DAYS[j.mode === 'remote' ? 'remote' : 'onsite'] * 864e5)
   .sort((a, b) => Date.parse(b.posted) - Date.parse(a.posted))
