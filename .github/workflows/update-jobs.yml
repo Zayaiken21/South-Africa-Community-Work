@@ -13,6 +13,7 @@ on:
       - scripts/fetch-jobs.mjs
       - scripts/sa-places.mjs
       - .github/workflows/update-jobs.yml
+      - jooble-boost.json
 
 permissions:
   contents: write
@@ -24,7 +25,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 

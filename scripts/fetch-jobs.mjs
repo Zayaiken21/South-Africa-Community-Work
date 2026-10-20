@@ -105,36 +105,53 @@ const joobleWords = {
   'Finance': 'accountant', 'HR & recruitment': 'HR', 'Legal': 'legal',
 };
 
+// A one-off "boost" (jooble-boost.json in the repo) spends a large part of the allowance in a single run,
+// searching every field nationally and in every province and following full result pages.
+async function readBoost() { try { return JSON.parse(await readFile('jooble-boost.json', 'utf8')); } catch { return null; } }
+
 async function jooble(state) {
   const key = process.env.JOOBLE_API_KEY;
   if (!key) { console.log('Jooble: skipped — add a JOOBLE_API_KEY secret for more South African jobs'); return null; }
-  if (state.joobleLimit !== JOOBLE_LIMIT) { state.joobleLimit = JOOBLE_LIMIT; }      // a raised limit (repo variable) takes effect at once
+  state.joobleLimit = JOOBLE_LIMIT;
   if ((state.joobleBlockedAt || 0) > Date.now() - 864e5) { console.log('Jooble: paused for a day after the key was refused'); return null; }
   const used = state.joobleUsed || 0, left = JOOBLE_LIMIT - 5 - used;                 // keep a few in reserve
   if (left <= 0) { console.log(`Jooble: allowance used (${used} of ${JOOBLE_LIMIT}). Ask Jooble for more, then set the JOOBLE_TOTAL_LIMIT repo variable.`); return null; }
   const fieldsList = Object.keys(joobleWords);
-  const budget = Math.min(left, used === 0 ? fieldsList.length : JOOBLE_CALLS);    // first run: one call per field
-  let cursor = state.joobleCursor || 0, made = 0;
+  const boost = await readBoost();
+  const boosting = boost?.id && boost.id !== state.joobleBoostDone && Number(boost.calls) > 0;
+  const budget = Math.min(left, boosting ? Number(boost.calls) : used === 0 ? fieldsList.length : JOOBLE_CALLS);
+
+  // Search queue: [field, place, page]. Normal runs rotate one field at a time nationally.
+  const places = ['South Africa', ...provinces];
+  let cursor = state.joobleCursor || 0;
+  const queue = boosting
+    ? places.flatMap(place => fieldsList.map(field => [field, place, 1]))
+    : Array.from({length: budget}, () => [fieldsList[(cursor++) % fieldsList.length], 'South Africa', 1]);
   const jobs = [];
-  for (let i = 0; i < budget; i++) {
-    const field = fieldsList[cursor % fieldsList.length];
-    cursor++;
+  let made = 0, pageSize = 0;
+  while (made < budget && queue.length) {
+    const [field, place, page] = queue.shift();
     state.joobleUsed = (state.joobleUsed || 0) + 1; made++;
     let d;
     try {
       d = await getJson(`https://jooble.org/api/${encodeURIComponent(key)}`, {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({keywords: joobleWords[field], location: 'South Africa', page: 1, ResultOnPage: 50}),
+        body: JSON.stringify({keywords: joobleWords[field], location: place, page, ResultOnPage: 50}),
       });
     } catch (e) {
       console.warn(`Jooble: call failed — ${e.message}`);
       if (/\b(401|403|429)\b/.test(e.message)) { state.joobleBlockedAt = Date.now(); break; }
       continue;
     }
-    for (const j of d?.jobs || []) {
-      const title = strip(j.title), where = strip(j.location) || 'South Africa';
+    const found = d?.jobs || [];
+    pageSize = Math.max(pageSize, found.length);
+    // A full page means there are probably more: queue the next page of the same search.
+    if (boosting && found.length && found.length >= pageSize && page < 20) queue.push([field, place, page + 1]);
+    for (const j of found) {
+      const title = strip(j.title), where = strip(j.location) || place;
       const remote = /remote|work from home|wfh/i.test(`${title} ${where} ${j.type || ''}`);
-      const pos = remote ? {} : located(where);
+      let pos = remote ? {} : located(where);
+      if (!remote && !pos.province && place !== 'South Africa') pos = {...located(place), province: place};
       const guessed = categorize(title);
       jobs.push({
         id: 'jooble:' + (j.id || j.link), source: 'Jooble', sourceUrl: 'https://za.jooble.org', url: j.link, title,
@@ -144,9 +161,11 @@ async function jooble(state) {
         posted: iso(j.updated) || new Date().toISOString(), excerpt: excerpt(j.snippet),
       });
     }
+    if (boosting) await new Promise(r => setTimeout(r, Number(process.env.JOOBLE_DELAY_MS ?? 400)));
   }
-  state.joobleCursor = cursor % fieldsList.length;
-  console.log(`Jooble: ${made} calls this run, ${state.joobleUsed} of ${JOOBLE_LIMIT} used in total`);
+  if (boosting) state.joobleBoostDone = boost.id;
+  if (!boosting) state.joobleCursor = cursor % fieldsList.length;
+  console.log(`Jooble: ${made} calls this run${boosting ? ' (boost)' : ''}, ${state.joobleUsed} of ${JOOBLE_LIMIT} used in total, ${jobs.length} listings`);
   return jobs;
 }
 
