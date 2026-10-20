@@ -1,0 +1,68 @@
+{
+  "_help": "Your affiliate offers. Paste your tracking link into url. Remove \"sample\": true (or delete the samples) to go live. Samples only show with ?adpreview=1. Full guide: ADS.md",
+  "offers": [
+    {
+      "id": "sample-excel",
+      "sample": true,
+      "partner": "Sample course partner",
+      "title": "Learn Excel in two weeks",
+      "text": "Short online course with a certificate you can add to your CV.",
+      "badge": "Certificate included",
+      "cta": "See course",
+      "url": "https://example.com/your-affiliate-link",
+      "spots": ["feed", "article", "sidebar"],
+      "categories": ["Admin & office", "Finance", "Retail", "Customer service"],
+      "weight": 2
+    },
+    {
+      "id": "sample-licence",
+      "sample": true,
+      "partner": "Sample driving school",
+      "title": "Get your Code 10 licence",
+      "text": "Lessons and test booking in your area. Most delivery jobs ask for Code 10.",
+      "badge": "Book online",
+      "cta": "Find lessons",
+      "url": "https://example.com/your-affiliate-link",
+      "spots": ["feed", "article"],
+      "categories": ["Driving & delivery", "Warehouse & logistics"],
+      "modes": ["onsite"]
+    },
+    {
+      "id": "sample-freelance",
+      "sample": true,
+      "partner": "Sample freelance site",
+      "title": "Earn from home with your skills",
+      "text": "Sell writing, design or admin services to clients worldwide.",
+      "badge": "Free to join",
+      "cta": "Start free",
+      "url": "https://example.com/your-affiliate-link",
+      "spots": ["feed", "sidebar", "hanging"],
+      "categories": ["Tech & IT", "Sales & marketing", "Admin & office", "Customer service"],
+      "modes": ["remote"],
+      "weight": 2
+    },
+    {
+      "id": "sample-data",
+      "sample": true,
+      "partner": "Sample mobile network",
+      "title": "Cheaper data for job hunting",
+      "text": "Monthly data bundles for apps, email and video interviews.",
+      "cta": "See bundles",
+      "url": "https://example.com/your-affiliate-link",
+      "spots": ["feed", "hanging"]
+    },
+    {
+      "id": "sample-boots",
+      "sample": true,
+      "partner": "Sample workwear store",
+      "title": "Safety boots and work gear",
+      "text": "Steel-toe boots, reflective vests and overalls, delivered nationwide.",
+      "badge": "Free delivery over R500",
+      "cta": "Shop gear",
+      "url": "https://example.com/your-affiliate-link",
+      "spots": ["feed", "article", "sidebar"],
+      "categories": ["Construction", "Warehouse & logistics", "Cleaning"],
+      "modes": ["onsite"]
+    }
+  ]
+}

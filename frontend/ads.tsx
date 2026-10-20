@@ -1,121 +1,201 @@
-import {useEffect, useRef, useState} from 'react';
-import {FileUser, Plus, Download, Globe, ArrowRight} from 'lucide-react';
+import {useEffect, useMemo, useRef, useState} from 'react';
+import {ArrowUpRight, X} from 'lucide-react';
 
-// Ad settings live in /ads-config.json so they can be edited on GitHub without rebuilding.
-// Until `client` and the slot IDs are filled in, every spot shows an in-house promo instead.
-export type AdKind = 'sidebar' | 'feed' | 'article';
-type AdConfig = {
-  enabled: boolean;
-  client: string;                                  // "ca-pub-…" from AdSense
-  slots: Partial<Record<AdKind, string>>;          // ad unit IDs from AdSense → Ads → By ad unit
-  feedLayoutKey?: string;                          // shown when you create the In-feed unit
-  houseAds: boolean;                               // show our own promos where no paid ad is configured
+/*
+  Money spots: affiliate offers first (affiliates.json), Google AdSense second (ads-config.json).
+  Nothing shows when neither has something for a spot — no filler promos.
+
+  Preview the layout with sample offers: add ?adpreview=1 to any page URL.
+*/
+
+export type Spot = 'feed' | 'article' | 'sidebar' | 'hanging';
+
+export type Offer = {
+  id: string;
+  partner: string;            // brand shown on the card, e.g. "Coursera"
+  title: string;              // one-line headline
+  text: string;               // one or two short sentences
+  url: string;                // your affiliate / tracking link
+  cta?: string;               // button text, default "Learn more"
+  badge?: string;             // short highlight, e.g. "Free to join"
+  logo?: string;              // https:// image, square
+  spots?: Spot[];             // where it may appear (default: all but hanging)
+  categories?: string[];      // job categories it suits; empty = any
+  modes?: ('onsite' | 'remote')[]; // in-person / online jobs it suits; empty = any
+  weight?: number;            // higher shows more often (default 1)
+  impressionUrl?: string;     // optional view-tracking pixel from your network (pay per view)
+  start?: string; end?: string; // optional ISO dates
+  sample?: boolean;           // only shown in ?adpreview=1
 };
 
-const fallback: AdConfig = {enabled: false, client: '', slots: {}, houseAds: true};
+type AdConfig = {enabled: boolean; client: string; slots: Partial<Record<'feed' | 'sidebar' | 'article', string>>; feedLayoutKey?: string};
+
+const preview = new URLSearchParams(location.search).has('adpreview');
+let offersPromise: Promise<Offer[]> | null = null;
 let configPromise: Promise<AdConfig> | null = null;
 let scriptAdded = false;
 
-export function loadAdConfig(): Promise<AdConfig> {
+function loadOffers(): Promise<Offer[]> {
+  if (!offersPromise) {
+    offersPromise = fetch('./affiliates.json', {cache: 'no-cache'})
+      .then(r => (r.ok ? r.json() : {offers: []}))
+      .then((d: any) => {
+        const now = Date.now();
+        return (Array.isArray(d?.offers) ? d.offers : []).filter((o: Offer) =>
+          o && o.id && o.title && /^https:\/\//.test(o.url || '') &&
+          (preview ? true : !o.sample) &&
+          (!o.start || Date.parse(o.start) <= now) && (!o.end || Date.parse(o.end) > now));
+      })
+      .catch(() => []);
+  }
+  return offersPromise;
+}
+
+function loadAdConfig(): Promise<AdConfig> {
   if (!configPromise) {
     configPromise = fetch('./ads-config.json', {cache: 'no-cache'})
-      .then(r => (r.ok ? r.json() : fallback))
-      .then((c: any) => ({...fallback, ...c, slots: {...(c?.slots || {})}}))
-      .catch(() => fallback);
+      .then(r => (r.ok ? r.json() : {}))
+      .then((c: any) => ({enabled: !!c?.enabled, client: c?.client || '', slots: c?.slots || {}, feedLayoutKey: c?.feedLayoutKey}))
+      .catch(() => ({enabled: false, client: '', slots: {}}));
   }
   return configPromise;
 }
 
-const live = (c: AdConfig) => c.enabled && /^ca-pub-\d{10,}$/.test(c.client);
+const adsenseLive = (c: AdConfig) => c.enabled && /^ca-pub-\d{10,}$/.test(c.client);
 
-// Loads Google's ad script once. Auto ads settings in AdSense (anchor/"hanging" ads, side rails) come from this same script.
 export function initAds() {
   loadAdConfig().then(c => {
-    if (!live(c) || scriptAdded) return;
+    if (!adsenseLive(c) || scriptAdded) return;
     scriptAdded = true;
     const s = document.createElement('script');
-    s.async = true;
-    s.crossOrigin = 'anonymous';
+    s.async = true; s.crossOrigin = 'anonymous';
     s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + encodeURIComponent(c.client);
     document.head.appendChild(s);
   });
 }
 
-function useAdConfig() {
-  const [config, setConfig] = useState<AdConfig | null>(null);
-  useEffect(() => { loadAdConfig().then(setConfig); }, []);
-  return config;
+function useMoney() {
+  const [state, setState] = useState<{offers: Offer[]; config: AdConfig} | null>(null);
+  useEffect(() => { Promise.all([loadOffers(), loadAdConfig()]).then(([offers, config]) => setState({offers, config})); }, []);
+  return state;
 }
 
-// In-house promos keep the layout honest before AdSense approval (and fill unsold space after).
-const promos = [
-  {icon: FileUser, title: 'Build a CV that gets calls', text: 'Free CV builder. Download as PDF or Word in minutes.', href: 'cv-builder.html', cta: 'Make my CV'},
-  {icon: Plus, title: 'Hiring in your area?', text: 'Post a job free and reach workers nearby.', href: 'post-job.html', cta: 'Post a job'},
-  {icon: Globe, title: 'Work from anywhere', text: 'Online jobs open to people in South Africa.', href: 'find-work.html?mode=remote', cta: 'See online jobs'},
-  {icon: Download, title: 'Get the app', text: 'Install Community Work on your phone for quicker job searches.', href: 'how-it-works.html', cta: 'How it works'},
-];
+// Pick an offer for a spot: best match for the context, and no offer used by two spots on one page.
+// Assignments are remembered per spot, so a spot keeps its offer when the job list re-renders.
+const assigned = new Map<string, string>();
+function pickOffer(offers: Offer[], spot: Spot, ctx: {category?: string; mode?: string}, seed: number): Offer | null {
+  const key = `${spot}:${seed}`;
+  const kept = offers.find(o => o.id === assigned.get(key));
+  if (kept) return kept;
+  const taken = new Set([...assigned].filter(([k]) => k !== key).map(([, id]) => id));
+  const fits = offers.filter(o =>
+    (o.spots?.length ? o.spots.includes(spot) : spot !== 'hanging') &&
+    (!o.modes?.length || !ctx.mode || o.modes.includes(ctx.mode as any)));
+  if (!fits.length) return null;
+  const score = (o: Offer) => (o.weight || 1) * (o.categories?.length && ctx.category && o.categories.includes(ctx.category) ? 3 : 1);
+  const fresh = fits.filter(o => !taken.has(o.id));
+  const pool = (fresh.length ? fresh : fits).slice().sort((a, b) => score(b) - score(a));
+  const best = pool.filter(o => score(o) === score(pool[0]));
+  const o = best[0];
+  assigned.set(key, o.id);
+  return o;
+}
 
-function HouseAd({kind, seed}: {kind: AdKind; seed: number}) {
-  const p = promos[seed % promos.length];
-  const Icon = p.icon;
+function useImpression(ref: React.RefObject<HTMLElement | null>, url?: string) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !url || preview) return;
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) { const img = new Image(); img.referrerPolicy = 'no-referrer-when-downgrade'; img.src = url; io.disconnect(); }
+    }, {threshold: 0.5});
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, url]);
+}
+
+function initials(name: string) { return name.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'AD'; }
+
+function OfferCard({offer, spot}: {offer: Offer; spot: Spot}) {
+  const ref = useRef<HTMLElement>(null);
+  useImpression(ref, offer.impressionUrl);
   return (
-    <aside className={'ad house ad-' + kind} aria-label="Community Work promotion">
-      <span className="ad-label">From Community Work</span>
-      <a className="house-body" href={p.href}>
-        <span className="house-icon"><Icon size={22}/></span>
-        <span className="house-text"><strong>{p.title}</strong><small>{p.text}</small></span>
-        <span className="house-cta">{p.cta}<ArrowRight size={15}/></span>
+    <aside ref={ref} className={'sponsored sp-' + spot} aria-label={'Sponsored: ' + offer.partner}>
+      <div className="sp-top">
+        <span className="sp-label">Sponsored{offer.sample ? ' · sample' : ''}</span>
+        <span className="sp-partner">{offer.partner}</span>
+      </div>
+      <a className="sp-body" href={offer.url} target="_blank" rel="sponsored noopener">
+        {offer.logo ? <img className="sp-logo" src={offer.logo} alt="" loading="lazy" width={48} height={48}/> : <span className="sp-logo">{initials(offer.partner)}</span>}
+        <span className="sp-text">
+          <strong>{offer.title}</strong>
+          <small>{offer.text}</small>
+          {offer.badge && <em>{offer.badge}</em>}
+        </span>
+        <span className="sp-cta">{offer.cta || 'Learn more'}<ArrowUpRight size={15}/></span>
       </a>
+      <p className="sp-note">We may earn a commission when you use this link.</p>
     </aside>
   );
 }
 
-export function AdSlot({kind, seed = 0}: {kind: AdKind; seed?: number}) {
-  const config = useAdConfig();
+function AdSenseUnit({config, spot}: {config: AdConfig; spot: 'feed' | 'article' | 'sidebar'}) {
   const ref = useRef<HTMLModElement>(null);
-  const slot = config?.slots[kind];
-  const paid = !!config && live(config) && !!slot;
-
   useEffect(() => {
-    if (!paid || !ref.current || ref.current.dataset.adsbygoogleStatus) return;
+    if (!ref.current || ref.current.dataset.adsbygoogleStatus) return;
     try { ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({}); } catch { /* blocked */ }
-  }, [paid]);
-
-  if (!config) return null;
-  if (!paid) return config.houseAds ? <HouseAd kind={kind} seed={seed}/> : null;
-
-  const format = kind === 'feed'
+  }, []);
+  const format = spot === 'feed'
     ? {'data-ad-format': 'fluid', 'data-ad-layout-key': config.feedLayoutKey || ''}
-    : kind === 'article'
-      ? {'data-ad-format': 'fluid', 'data-ad-layout': 'in-article'}
-      : {'data-ad-format': 'auto', 'data-full-width-responsive': 'true'};
-
+    : spot === 'article' ? {'data-ad-format': 'fluid', 'data-ad-layout': 'in-article'}
+    : {'data-ad-format': 'auto', 'data-full-width-responsive': 'true'};
   return (
-    <aside className={'ad ad-' + kind} aria-label="Advertisement">
-      <span className="ad-label">Advertisement</span>
-      <ins ref={ref} className="adsbygoogle" style={{display: 'block', textAlign: kind === 'article' ? 'center' : undefined}}
-        data-ad-client={config.client} data-ad-slot={slot} {...format}/>
+    <aside className={'ad ad-' + spot} aria-label="Advertisement">
+      <span className="sp-label">Advertisement</span>
+      <ins ref={ref} className="adsbygoogle" style={{display: 'block'}} data-ad-client={config.client} data-ad-slot={config.slots[spot]} {...format}/>
     </aside>
   );
 }
 
-// "Hanging" bottom promo for phones while AdSense isn't live. Once paid ads are on, Google's own anchor ads take this role.
-export function HangingPromo() {
-  const config = useAdConfig();
-  const [show, setShow] = useState(false);
+/*
+  One money spot. `index` = how many spots of this kind came before on the page:
+  even spots prefer an affiliate offer, odd ones prefer AdSense, each falling back to the other.
+*/
+export function AdSlot({spot, index = 0, category, mode}: {spot: 'feed' | 'article' | 'sidebar'; index?: number; category?: string; mode?: string}) {
+  const money = useMoney();
+  const offer = useMemo(() => money ? pickOffer(money.offers, spot, {category, mode}, index) : null, [money]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!money) return null;
+  const google = adsenseLive(money.config) && !!money.config.slots[spot];
+  const preferGoogle = index % 2 === 1;
+  if (offer && (!google || !preferGoogle)) return <OfferCard offer={offer} spot={spot}/>;
+  if (google) return <AdSenseUnit config={money.config} spot={spot}/>;
+  return null;
+}
+
+// Hanging (anchor) offer on phones. When AdSense is live, Google's own anchor ad takes this place instead.
+export function HangingOffer() {
+  const money = useMoney();
+  const [offer, setOffer] = useState<Offer | null>(null);
   useEffect(() => {
-    if (!config || live(config) || !config.houseAds) return;
-    try { if (Number(localStorage.getItem('cw-hang-closed') || 0) > Date.now() - 7 * 86400000) return; } catch { /* ignore */ }
-    const onScroll = () => { if (window.scrollY > window.innerHeight * 1.5) { setShow(true); window.removeEventListener('scroll', onScroll); } };
+    if (!money || (adsenseLive(money.config) && !preview)) return;
+    try { if (!preview && Number(localStorage.getItem('cw-hang-closed') || 0) > Date.now() - 3 * 86400000) return; } catch { /* ignore */ }
+    const o = money.offers.filter(x => x.spots?.includes('hanging'));
+    if (!o.length) return;
+    const pick = o[Math.floor(Math.random() * o.length)];
+    const onScroll = () => { if (window.scrollY > window.innerHeight * 1.2) { setOffer(pick); window.removeEventListener('scroll', onScroll); } };
     window.addEventListener('scroll', onScroll, {passive: true});
     return () => window.removeEventListener('scroll', onScroll);
-  }, [config]);
-  if (!show) return null;
-  const close = () => { setShow(false); try { localStorage.setItem('cw-hang-closed', String(Date.now())); } catch { /* ignore */ } };
+  }, [money]);
+  const ref = useRef<HTMLDivElement>(null);
+  useImpression(ref, offer?.impressionUrl);
+  if (!offer) return null;
+  const close = () => { setOffer(null); try { localStorage.setItem('cw-hang-closed', String(Date.now())); } catch { /* ignore */ } };
   return (
-    <div className="hanging" role="complementary" aria-label="Community Work promotion">
-      <a href="cv-builder.html"><FileUser size={20}/><span><strong>No CV yet?</strong> Build one free in minutes</span><ArrowRight size={16}/></a>
-      <button className="icon-btn" aria-label="Close" onClick={close}>×</button>
+    <div ref={ref} className="hanging" role="complementary" aria-label={'Sponsored: ' + offer.partner}>
+      <a href={offer.url} target="_blank" rel="sponsored noopener">
+        <span className="hang-text"><small><b>Sponsored</b> · {offer.partner}</small><strong>{offer.title}</strong></span>
+        <span className="hang-cta">{offer.cta || 'Open'}</span>
+      </a>
+      <button className="icon-btn" aria-label="Close sponsored message" onClick={close}><X size={18}/></button>
     </div>
   );
 }
