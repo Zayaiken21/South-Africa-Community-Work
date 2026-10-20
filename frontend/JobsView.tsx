@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {
   MapPin, Search, SlidersHorizontal, LoaderCircle, Navigation, Bookmark, ArrowUpRight, Globe, X, Check, Plus,
-  BriefcaseBusiness, ChevronDown, LocateFixed, RefreshCw, Users, Laptop, Building2,
+  BriefcaseBusiness, ChevronDown, LocateFixed, RefreshCw, Users, Laptop, Building2, FileUser, ArrowRight,
 } from 'lucide-react';
 import {provinces, categories as postCategories} from '../lib/jobs';
 import {LocationPicker} from './LocationPicker';
@@ -248,6 +248,14 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
             </label>
           </div>
 
+          {welcome && (
+            <a className="cv-promo" href="cv-builder.html">
+              <span className="cv-promo-icon"><FileUser size={22}/></span>
+              <span><strong>No CV yet? Build one in minutes</strong><small>Free · download as PDF or Word · stays on your phone</small></span>
+              <ArrowRight size={18}/>
+            </a>
+          )}
+
           {communityError && location && (
             <p className="alert soft">Community shifts couldn’t load right now. <button className="link" onClick={() => setRefresh(v => v + 1)}><RefreshCw size={13}/> Retry</button></p>
           )}
@@ -289,6 +297,12 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
             <button className="btn btn-outline btn-sm" onClick={() => setSheet('location')}>{location ? 'Change area' : 'Set area'}</button>
             <small>Distances are straight-line estimates. Check your route before agreeing to work.</small>
           </div>
+          <a className="side-card cv" href="cv-builder.html">
+            <FileUser size={20}/>
+            <h3>Build your CV</h3>
+            <p>Fill in your details and download a polished CV as PDF or Word.</p>
+            <span className="link">Open CV builder <ArrowRight size={15}/></span>
+          </a>
           <div className="side-card dark">
             <span className="overline">For local businesses</span>
             <h3>Need hands on deck?</h3>

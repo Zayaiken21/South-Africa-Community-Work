@@ -164,6 +164,16 @@ svg { flex-shrink: 0; }
 .side-card.dark .overline { color: var(--lime); }
 .side-card.dark p { color: #b9c6bd; }
 
+.cv-promo { display: flex; align-items: center; gap: 14px; background: var(--lime-soft); border: 1px solid color-mix(in srgb, var(--lime) 55%, var(--line)); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; }
+.cv-promo span:nth-child(2) { flex: 1; display: grid; gap: 2px; }
+.cv-promo strong { font-family: var(--display); font-size: 15.5px; }
+.cv-promo small { font-size: 13px; color: var(--muted); }
+.cv-promo > svg { color: var(--green); }
+.cv-promo-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--green); color: #fff; flex: none; }
+.side-card.cv { background: var(--surface); border: 1px solid var(--line); }
+.side-card.cv > svg { color: var(--green); }
+.side-card.cv p { color: var(--muted); }
+@media (min-width: 981px) { .cv-promo { display: none; } }
 .banner { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--green); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 14px; }
 .banner > svg { color: var(--green); }
 .banner div { flex: 1; display: grid; gap: 2px; font-size: 14px; }

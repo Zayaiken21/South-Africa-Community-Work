@@ -76,6 +76,16 @@
           "sizes": "192x192"
         }
       ]
+    },
+    {
+      "name": "Build a CV",
+      "url": "./cv-builder.html",
+      "icons": [
+        {
+          "src": "assets/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }
