@@ -1,5 +1,5 @@
-const CACHE='cw-3f6624ac9a';
-const SHELL=['./','./index.html','./find-work.html','./post-job.html','./saved-jobs.html','./job.html','./offline.html','./cv-builder.html','./assets/community-app.js?v=3f6624ac9a','./assets/community-app.css?v=3f6624ac9a','./assets/favicon.svg','./assets/icons/icon-192.png','./manifest.webmanifest'];
+const CACHE='cw-635cc955cb';
+const SHELL=['./','./index.html','./find-work.html','./shifts.html','./account.html','./saved-jobs.html','./job.html','./offline.html','./cv-builder.html','./assets/community-app.js?v=635cc955cb','./assets/community-app.css?v=635cc955cb','./assets/favicon.svg','./assets/icons/icon-192.png','./manifest.webmanifest'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(n=>n!==CACHE).map(n=>caches.delete(n)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',e=>{
@@ -11,6 +11,6 @@ self.addEventListener('fetch',e=>{
     return;
   }
   if(r.mode==='navigate'){e.respondWith(fetch(r).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(async()=>(await caches.match(r,{ignoreSearch:true}))||caches.match('./offline.html')));return;}
-  if(u.pathname.endsWith('/data/jobs-feed.json')||u.pathname.endsWith('/ads-config.json')||u.pathname.endsWith('/affiliates.json')){e.respondWith(fetch(r).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(()=>caches.match(r,{ignoreSearch:true})));return;}
+  if(u.pathname.endsWith('/data/jobs-feed.json')||u.pathname.endsWith('/ads-config.json')||u.pathname.endsWith('/affiliates.json')||u.pathname.endsWith('/backend-config.json')||u.pathname.endsWith('/analytics-config.json')){e.respondWith(fetch(r).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(()=>caches.match(r,{ignoreSearch:true})));return;}
   e.respondWith(caches.match(r).then(hit=>hit||fetch(r).then(res=>{if(res.ok){const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));}return res;})));
 });

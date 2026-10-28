@@ -76,6 +76,39 @@ function salaryLabel(min, max, cur, period) {
   const r = min && max && Math.round(min) !== Math.round(max) ? `${c}${fmt(min)} – ${c}${fmt(max)}` : `${c}${fmt(min || max)}`;
   return period ? `${r} ${period}` : r;
 }
+// ---------- Rand conversion ----------
+// Daily rates (units of each currency per 1 rand). Kept in state.json so a failed lookup reuses yesterday's.
+async function loadRates(state) {
+  const sources = [
+    async () => (await getJson('https://open.er-api.com/v6/latest/ZAR')).rates,
+    async () => (await getJson('https://api.frankfurter.app/latest?from=ZAR')).rates,
+  ];
+  for (const src of sources) {
+    try { const r = await src(); if (r && r.USD > 0) { state.rates = {...r, ZAR: 1}; state.ratesAt = new Date().toISOString(); return state.rates; } }
+    catch (e) { console.warn('Exchange rates: ' + e.message); }
+  }
+  return state.rates || null;
+}
+const CURRENCY = [
+  [/US\$|USD|\$/i, 'USD'], [/€|EUR/i, 'EUR'], [/£|GBP/i, 'GBP'], [/CA\$|CAD/i, 'CAD'], [/A\$|AUD/i, 'AUD'], [/₹|INR/i, 'INR'],
+  [/NGN|₦/i, 'NGN'], [/KES/i, 'KES'], [/CHF/i, 'CHF'], [/PLN|zł/i, 'PLN'], [/BRL|R\$/i, 'BRL'], [/ZAR|\bR\s?\d/i, 'ZAR'],
+];
+function toRand(text, rates) {
+  const t = String(text || '');
+  if (!t || !rates) return null;
+  const cur = (CURRENCY.find(([re]) => re.test(t)) || [])[1];
+  if (!cur || cur === 'ZAR' || !rates[cur]) return null;
+  const nums = [...t.replace(/(\d)[\s,](?=\d{3}\b)/g, '$1').matchAll(/(\d+(?:\.\d+)?)\s*([kK])?/g)]
+    .map(m => Number(m[1]) * (m[2] ? 1000 : 1)).filter(n => n > 0).slice(0, 2);
+  if (!nums.length) return null;
+  const period = /hour|\/hr|\bhr\b|hourly/i.test(t) ? 'hour' : /month|\/mo\b|monthly/i.test(t) ? 'month' : /day|daily/i.test(t) ? 'day' : /week/i.test(t) ? 'week' : /year|annum|\/yr|annual|yearly|\bpa\b/i.test(t) ? 'year' : (Math.max(...nums) > 2000 ? 'year' : 'hour');
+  const zar = nums.map(n => n / rates[cur]);
+  const round = v => period === 'hour' || period === 'day' ? Math.round(v) : Math.round(v / 100) * 100;
+  const label = zar.length > 1 && round(zar[0]) !== round(zar[1]) ? `R${fmt(round(zar[0]))} – R${fmt(round(zar[1]))}` : `R${fmt(round(zar[0]))}`;
+  const perHour = {hour: 1, day: 1 / 8, week: 1 / 40, month: 1 / 173, year: 1 / 2080}[period];
+  return {label: `${label} per ${period}`, hourly: Math.round(Math.min(...zar) * perHour), currency: cur};
+}
+
 const openToSA = loc => !loc || /worldwide|anywhere|global|south africa|\bafrica\b|emea|\bza\b|^remote$|^$/i.test(String(loc).trim());
 const iso = v => { const t = typeof v === 'number' ? (v > 1e12 ? v : v * 1000) : Date.parse(v); return Number.isFinite(t) ? new Date(t).toISOString() : null; };
 
@@ -300,6 +333,12 @@ for (const s of sources) {
 }
 
 // Expire old jobs, re-categorise older entries, remove duplicate adverts of the same role.
+const rates = await loadRates(state);
+for (const j of all.values()) {
+  const source = j.salaryOriginal || j.salary;
+  const r = toRand(source, rates);
+  if (r) { j.salaryOriginal = source; j.salary = r.label; j.salaryCurrency = r.currency; if (!j.hourlyZar) j.hourlyZar = r.hourly; }
+}
 const now = Date.now(), seen = new Set();
 let jobs = [...all.values()]
   .filter(j => j.source !== 'Adzuna')
@@ -334,6 +373,7 @@ const index = {
   fields: fields.map(f => ({name: f, slug: slug(f), count: jobs.filter(j => j.category === f).length})),
   provinces: provinces.map(p => ({name: p, slug: slug(p), count: jobs.filter(j => j.mode === 'onsite' && j.province === p).length})),
   sources: sources.filter(s => used.get(s.name)).map(s => ({name: s.name, url: s.url, count: used.get(s.name)})),
+  rates: rates ? {at: state.ratesAt, USD: +(1 / rates.USD).toFixed(2), EUR: rates.EUR ? +(1 / rates.EUR).toFixed(2) : undefined, GBP: rates.GBP ? +(1 / rates.GBP).toFixed(2) : undefined} : undefined,
 };
 await writeFile(`${OUT}/index.json`, JSON.stringify(index));
 await writeFile(`${OUT}/state.json`, JSON.stringify(state));

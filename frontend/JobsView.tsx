@@ -116,7 +116,7 @@ function toListings(community: CommunityJob[], feed: Feed | null, location: Loca
   }));
   const b: Listing[] = (feed?.jobs || []).map(j => ({
     key: j.id, kind: 'feed', mode: j.mode, title: j.title, company: j.company, place: j.location, category: j.category,
-    excerpt: j.excerpt, payLabel: j.salary, paySub: j.type, hourly: j.hourlyZar,
+    excerpt: j.excerpt, payLabel: j.salary, paySub: [j.salaryOriginal && `≈ converted from ${j.salaryOriginal}`, j.type].filter(Boolean).join(' · ') || undefined, hourly: j.hourlyZar,
     distance: location && j.lat != null && j.lon != null ? distanceKm(location.lat, location.lon, j.lat, j.lon) : undefined,
     date: Date.parse(j.posted), dateLabel: ago(Date.parse(j.posted)), href: j.url, external: true, source: j.source, sourceUrl: j.sourceUrl,
   }));
@@ -311,7 +311,7 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
               <p>{feedError || !feed?.updated ? 'More listings are on their way. Try again soon, or widen your search.' : 'Try a bigger distance, another category, or clear your search.'}</p>
               <div className="row-gap">
                 <button className="btn btn-outline" onClick={() => { setQuery(''); setCategory(''); setMinPay(''); setRadius(0); setMode('all'); }}>Clear filters</button>
-                <a className="btn btn-primary" href="post-job.html"><Plus size={17}/>Post a job</a>
+                <a className="btn btn-primary" href="shifts.html"><Plus size={17}/>See paid shifts</a>
               </div>
             </div>
           ) : (
@@ -362,8 +362,8 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
           <div className="side-card dark">
             <span className="overline">For local businesses</span>
             <h3>Need hands on deck?</h3>
-            <p>Post a shift with clear pay and hours. Nearby workers see it first.</p>
-            <a className="btn btn-light btn-sm" href="post-job.html">Post a job <ArrowUpRight size={15}/></a>
+            <p>Open a free business account, set the hourly rate and book workers for a day or a week.</p>
+            <a className="btn btn-light btn-sm" href="account.html?signup=1&type=business">Hire for shifts <ArrowUpRight size={15}/></a>
           </div>
         </aside>
       </div>
@@ -412,7 +412,7 @@ function JobCard({job, saved, onSave}: {job: Listing; saved: boolean; onSave: ()
       <div className="card-head">
         <span className={'avatar ' + job.mode}>{initials}</span>
         <div className="card-title">
-          <h3><a href={job.href} {...linkProps}>{job.title}</a></h3>
+          <h3><a href={job.href} {...linkProps} data-track="apply" data-job={`${job.title} · ${job.company}`} data-source={job.source || job.kind}>{job.title}</a></h3>
           <p>{job.company}</p>
         </div>
         <button className={'save-btn' + (saved ? ' on' : '')} onClick={onSave} aria-pressed={saved} aria-label={saved ? 'Remove from saved' : 'Save job'}>
@@ -435,7 +435,7 @@ function JobCard({job, saved, onSave}: {job: Listing; saved: boolean; onSave: ()
           {job.payLabel ? <strong>{job.payLabel}</strong> : <span className="muted">Pay not listed</span>}
           {job.paySub && <small>{job.paySub}</small>}
         </div>
-        <a className={'btn btn-sm ' + (job.external ? 'btn-outline' : 'btn-primary')} href={job.href} {...linkProps}>
+        <a className={'btn btn-sm ' + (job.external ? 'btn-outline' : 'btn-primary')} href={job.href} {...linkProps} data-track="apply" data-job={`${job.title} · ${job.company}`} data-source={job.source || job.kind}>
           {job.external ? <>Apply<ArrowUpRight size={15}/></> : 'View job'}
         </a>
       </div>

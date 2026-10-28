@@ -10,6 +10,15 @@ Pages: Home, Find Work, Post a Job, Job Details, Saved Jobs, How It Works, About
 
 The frontend calls the hosted jobs API at https://south-africa-community-work.chummy-tuna-9459.chatgpt.site/api/jobs . This API uses the shared D1 database. CORS allows the GitHub Pages origin, including POST preflight. No privileged API keys or tokens are included in the browser bundle. Both frontend and backend deployments must be updated when API contracts change.
 
+## Accounts, paid shifts and escrow (October 2026)
+
+- Worker and business accounts (Supabase): profile, bio, skills and a private CV upload.
+- Businesses post in-person shifts with an hourly rate in rand (minimum wage enforced) and book applicants.
+- Pay is held by TradeSafe escrow and released to the worker's bank after the shift; cash shifts are recorded too.
+- CEO/admin dashboard with authenticator codes: traffic, apply and sponsored clicks, users, payments, team and an activity log.
+- Own click tracking plus Google Analytics (after consent). All job pay is shown in rand.
+- Setup steps: **[BACKEND.md](BACKEND.md)**.
+
 ## App, location and job feeds (October 2026)
 
 - **Installable app.** `manifest.webmanifest`, `sw.js` (offline shell) and `assets/icons/` make the site a PWA. On phones it uses a bottom tab bar and bottom sheets, and follows the system light/dark theme. See `PLAY_STORE.md` to publish it on Google Play as a Trusted Web Activity.
