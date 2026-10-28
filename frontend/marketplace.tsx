@@ -790,7 +790,33 @@ type OpenShift = {id: string; title: string; description: string; category: stri
   hourly_rate_zar: number; workers_needed: number; booked: number; payment_method: string; business_id?: string; business_name: string; business_verified: boolean;
   business_avatar?: string | null; business_theme?: string | null; distance_km: number | null};
 
+// The Shifts tab follows the account's mode: Hiring shows the business's own shifts, Working (and visitors) the shift board.
 export function ShiftsPage() {
+  const acct = useAccount();
+  if (!acct.ready) return <div className="page"><div className="job-list">{[0, 1, 2].map(i => <div className="job-card skeleton" key={i}><span/><span/><span/></div>)}</div></div>;
+  if (acct.sb && acct.profile && modes(acct.profile).active === 'business')
+    return <HiringShifts sb={acct.sb} profile={acct.profile}/>;
+  return <ShiftBoard/>;
+}
+
+function HiringShifts({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
+  return (
+    <div className="page" style={themeStyle(profile.theme)}>
+      <div className="page-head with-action">
+        <div>
+          <p className="overline">Hiring · {profile.business_name || 'your business'}</p>
+          <h1>Your shifts</h1>
+          <p className="lede">Workers you’ve booked, hours to confirm and pay to release.</p>
+        </div>
+        <a className="btn btn-primary themed" href="account.html?tab=post"><Plus size={18}/>Post a shift</a>
+      </div>
+      <BusinessShifts sb={sb} profile={profile}/>
+      <p className="muted small center-text">Looking for work yourself? Switch to <strong>Working</strong> on your <a className="link" href="account.html">account page</a>.</p>
+    </div>
+  );
+}
+
+function ShiftBoard() {
   const acct = useAccount();
   const {location: area, choose} = useAreaLocation();
   const [radius, setRadius] = useState(30); // miles
