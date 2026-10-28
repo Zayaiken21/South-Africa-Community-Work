@@ -153,7 +153,12 @@ async function dispute(who: Caller, b: any) {
 async function cancel(who: Caller, b: any) {
   const p = await payment(b.paymentId);
   const staff = isStaffWithMfa(who);
-  if (!staff && !(who.id === p.business_id && p.state === 'awaiting_payment')) throw new HttpError(403, 'Once paid, only Community Work staff can cancel and refund.');
+  // The worker cancelled, didn't show up, or the business released them: the business gets its money back.
+  const {data: app} = await db.from('applications').select('status').eq('id', p.application_id).maybeSingle();
+  const bookingEnded = ['withdrawn', 'declined', 'no_show'].includes(app?.status ?? '');
+  const party = who.id === p.business_id || who.id === p.worker_id;
+  if (!staff && !(who.id === p.business_id && p.state === 'awaiting_payment') && !(party && bookingEnded && p.state !== 'disputed'))
+    throw new HttpError(403, 'Once paid, only Community Work staff can cancel and refund.');
   if (!['awaiting_payment', 'funded', 'disputed'].includes(p.state)) throw new HttpError(400, `This payment is already ${p.state}.`);
   await ts.cancelTransaction(p.provider_transaction_id, text(b.reason, 300) || 'Cancelled on Community Work');
   await db.from('payments').update({state: p.state === 'awaiting_payment' ? 'cancelled' : 'refunded', updated_at: new Date().toISOString()}).eq('id', p.id);

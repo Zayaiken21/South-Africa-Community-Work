@@ -69,23 +69,28 @@ await denied('business cannot post as another business', () => as('w1', 'aal1', 
 await ok('anonymous visitors see open shifts (no address)', async () => { const r = await as('anon', null, `select * from open_shifts(-26.2, 28.04, 50)`); const row = r.rows[0]; if (!row || 'address' in row) throw new Error('bad'); return `${row.business_name}, ${row.distance_km.toFixed(1)} km, R${row.hourly_rate_zar}`; });
 await ok('far-away visitor filtered by radius', async () => { const r = await as('anon', null, `select * from open_shifts(-33.92, 18.42, 50)`); if (r.rows.length) throw new Error('should be empty'); return 'none'; });
 
-// applications
+// pick-up: workers book themselves, first come first served
 let a1, a2;
-await ok('worker 1 applies', async () => { a1 = (await as('w1', 'aal1', `insert into applications (shift_id, worker_id, message) values ('${shiftId}', '${ids.w1}', 'I have kitchen experience') returning id`)).rows[0].id; return a1; });
-await ok('worker 2 applies', async () => { a2 = (await as('w2', 'aal1', `insert into applications (shift_id, worker_id) values ('${shiftId}', '${ids.w2}') returning id`)).rows[0].id; return a2; });
-await denied('worker cannot apply for someone else', () => as('w1', 'aal1', `insert into applications (shift_id, worker_id) values ('${shiftId}', '${ids.d}')`));
-await denied('business cannot apply to shifts', () => as('biz', 'aal1', `insert into applications (shift_id, worker_id) values ('${shiftId}', '${ids.biz}')`));
-await ok('worker 1 sees only own application', async () => { const r = await as('w1', 'aal1', `select worker_id from applications`); if (r.rows.length !== 1 || r.rows[0].worker_id !== ids.w1) throw new Error(JSON.stringify(r.rows)); return 1; });
-await ok('business sees both applicants and their profiles', async () => { const r = await as('biz', 'aal1', `select p.full_name from applications a join profiles p on p.id = a.worker_id order by 1`); return r.rows.map(x => x.full_name).join(', '); });
+await ok('worker 1 picks up the shift → booked instantly', async () => { const r = (await as('w1', 'aal1', `insert into applications (shift_id, worker_id, message) values ('${shiftId}', '${ids.w1}', 'I have kitchen experience') returning id, status`)).rows[0]; a1 = r.id; return r.status; });
+await ok('shift shows as filled', async () => (await db.query(`select status from shifts where id = $1`, [shiftId])).rows[0].status);
+await denied('worker 2 cannot take a full shift', () => as('w2', 'aal1', `insert into applications (shift_id, worker_id) values ('${shiftId}', '${ids.w2}')`));
+await denied('worker cannot book someone else', () => as('w1', 'aal1', `insert into applications (shift_id, worker_id) values ('${shiftId}', '${ids.d}')`));
+await denied('business cannot pick up shifts', () => as('biz', 'aal1', `insert into applications (shift_id, worker_id) values ('${shiftId}', '${ids.biz}')`));
+await ok('worker 1 sees only own booking', async () => { const r = await as('w1', 'aal1', `select worker_id from applications`); if (r.rows.length !== 1 || r.rows[0].worker_id !== ids.w1) throw new Error(JSON.stringify(r.rows)); return 1; });
+await ok('business sees who picked up and their profile', async () => { const r = await as('biz', 'aal1', `select p.full_name from applications a join profiles p on p.id = a.worker_id order by 1`); return r.rows.map(x => x.full_name).join(', '); });
 await ok("worker 2 can't see worker 1's profile", async () => { const r = await as('w2', 'aal1', `select * from profiles where id = '${ids.w1}'`); if (r.rows.length) throw new Error('leak'); return 'hidden'; });
 await ok('stranger sees no profiles but own', async () => { const r = await as('d', 'aal1', `select id from profiles`); if (r.rows.length !== 1) throw new Error(r.rows.length); return 1; });
-await denied('worker cannot accept itself', () => as('w1', 'aal1', `update applications set status = 'accepted' where id = '${a1}'`));
 await denied('worker cannot record hours', () => as('w1', 'aal1', `update applications set hours_worked = 8 where id = '${a1}'`));
-await ok('business accepts worker 1 → shift becomes filled', async () => { await as('biz', 'aal1', `update applications set status = 'accepted' where id = '${a1}'`); return (await db.query(`select status from shifts where id = $1`, [shiftId])).rows[0].status; });
-await denied('business cannot overbook', () => as('biz', 'aal1', `update applications set status = 'accepted' where id = '${a2}'`));
+await denied('worker cannot mark itself completed', () => as('w1', 'aal1', `update applications set status = 'completed' where id = '${a1}'`));
 await denied('pay locked once booked', () => as('biz', 'aal1', `update shifts set hourly_rate_zar = 35 where id = '${shiftId}'`));
 await ok('worker 1 still sees the filled shift', async () => (await as('w1', 'aal1', `select status from shifts where id = '${shiftId}'`)).rows[0]?.status || Promise.reject(new Error('hidden')));
 await ok('worker 1 sees the business profile (contact)', async () => (await as('w1', 'aal1', `select business_name from profiles where id = '${ids.biz}'`)).rows[0]?.business_name || Promise.reject(new Error('hidden')));
+let overlapId;
+await ok('business posts a second shift at the same time', async () => { overlapId = (await as('biz', 'aal1', shiftSql(50))).rows[0].id; return 'ok'; });
+await denied('worker 1 cannot double-book the same hours', () => as('w1', 'aal1', `insert into applications (shift_id, worker_id) values ('${overlapId}', '${ids.w1}')`));
+await ok('worker 2 picks up the second shift', async () => { a2 = (await as('w2', 'aal1', `insert into applications (shift_id, worker_id) values ('${overlapId}', '${ids.w2}') returning id`)).rows[0].id; return a2; });
+await ok('cancelling within the grace period is free', async () => { await as('w2', 'aal1', `update applications set status = 'withdrawn' where id = '${a2}'`); return (await db.query(`select strikes from profiles where id=$1`, [ids.w2])).rows[0].strikes; });
+await denied('worker cannot re-take a shift they cancelled', () => as('w2', 'aal1', `insert into applications (shift_id, worker_id) values ('${overlapId}', '${ids.w2}')`));
 
 // profile protections
 await denied('worker cannot mark itself verified', () => as('w1', 'aal1', `update profiles set verified = true where id = '${ids.w1}'`));
@@ -121,7 +126,6 @@ await denied("worker 1 cannot upload into worker 2's folder", () => as('w1', 'aa
 await ok('business can open applicant CV', async () => (await as('biz', 'aal1', `select name from storage.objects`)).rows.length);
 await ok("worker 2 cannot open worker 1's CV", async () => { const r = await as('w2', 'aal1', `select name from storage.objects`); if (r.rows.length) throw new Error('leak'); return 0; });
 
-await ok('worker 2 withdraws own application', async () => { await as('w2', 'aal1', `update applications set status = 'withdrawn' where id = '${a2}'`); return (await db.query(`select status from applications where id=$1`, [a2])).rows[0].status; });
 await ok('business records 8 hours and confirms', async () => { await as('biz', 'aal1', `update applications set hours_worked = 8, business_confirmed_at = now() where id = '${a1}'`); return (await db.query(`select hours_worked from applications where id=$1`, [a1])).rows[0].hours_worked; });
 await ok('worker confirms the hours', async () => { await as('w1', 'aal1', `update applications set worker_confirmed_at = now() where id = '${a1}'`); return !!(await db.query(`select worker_confirmed_at from applications where id=$1`, [a1])).rows[0].worker_confirmed_at; });
 await ok('new user can still switch to business before any activity', async () => { await as('d', 'aal1', `update profiles set account_type = 'business' where id = '${ids.d}'`); return (await db.query(`select account_type from profiles where id=$1`, [ids.d])).rows[0].account_type; });
@@ -129,4 +133,33 @@ await ok('admin searches users by email', async () => (await as('admin', 'aal2',
 await ok("search text can't break out of the query", async () => (await as('admin', 'aal2', `select count(*)::int n from admin_users($1)`, ["x' or 1=1 --"])).rows[0].n);
 await denied('worker cannot run admin search', async () => { const r = await as('w1', 'aal2', `select * from admin_users('')`); return r.rows.length ? r : {rows: [], affectedRows: 0}; });
 await denied('worker cannot read audit log', async () => { const r = await as('w1', 'aal2', `select * from audit_log`); return r.rows.length ? r : {rows: [], affectedRows: 0}; });
+
+// strikes, suspension and appeals
+const at = (days, hour) => { const d = new Date(Date.now() + days * 864e5); d.setUTCHours(hour, 0, 0, 0); return d; };
+const post = async (days) => (await as('biz', 'aal1', `insert into shifts (business_id, title, description, category, city, province, lat, lon, starts_at, ends_at, hourly_rate_zar, workers_needed)
+  values ('${ids.biz}', 'Shift ${days}', 'Prep and wash up for lunch service', 'Hospitality', 'Braamfontein', 'Gauteng', -26.193, 28.031, '${at(days, 6).toISOString()}', '${at(days, 12).toISOString()}', 45, 1) returning id`)).rows[0].id;
+const pick = async (w, shift) => (await as(w, 'aal1', `insert into applications (shift_id, worker_id) values ('${shift}', '${ids[w]}') returning id`)).rows[0].id;
+const strikesOf = async (w) => (await db.query(`select strikes, suspended from profiles where id=$1`, [ids[w]])).rows[0];
+await denied('admin cannot change the strike rules', () => as('admin', 'aal2', `select admin_set_settings(null, null, 1, 0)`));
+await ok('CEO sets the grace period to 0 minutes', async () => { await as('ceo', 'aal2', `select admin_set_settings(null, null, null, 0)`); return (await db.query(`select strike_limit, cancel_grace_minutes from app_settings`)).rows[0]; });
+for (const n of [1, 2]) await ok(`cancellation ${n} → strike ${n}`, async () => { const app = await pick('w2', await post(5 + n)); await as('w2', 'aal1', `update applications set status = 'withdrawn' where id = '${app}'`); return JSON.stringify(await strikesOf('w2')); });
+await denied('worker cannot wipe own strikes', () => as('w2', 'aal1', `update profiles set strikes = 0 where id = '${ids.w2}'`));
+await ok('no-show marked by the business → strike 3 → suspended, count restarts', async () => { const app = await pick('w2', await post(9)); await as('biz', 'aal1', `update applications set status = 'no_show' where id = '${app}'`); return JSON.stringify(await strikesOf('w2')); });
+await ok('strikes are recorded with type', async () => (await as('w2', 'aal1', `select kind from strikes order by at`)).rows.map(r => r.kind).join(','));
+await denied('suspended worker cannot pick up shifts', async () => pick('w2', await post(12)));
+await denied('suspended worker cannot unsuspend itself', () => as('w2', 'aal1', `update profiles set suspended = false where id = '${ids.w2}'`));
+await denied('worker who is not suspended cannot appeal', () => as('w1', 'aal1', `insert into appeals (user_id, reason) values ('${ids.w1}', 'Please look at my account')`));
+let appeal;
+await ok('suspended worker sends an appeal', async () => { appeal = (await as('w2', 'aal1', `insert into appeals (user_id, reason) values ('${ids.w2}', 'My child was sick on the day I missed. I will not miss again.') returning id`)).rows[0].id; return 'pending'; });
+await denied('only one open appeal at a time', () => as('w2', 'aal1', `insert into appeals (user_id, reason) values ('${ids.w2}', 'Second appeal while first is open')`));
+await denied('worker cannot approve own appeal', async () => { const r = await as('w2', 'aal1', `update appeals set status = 'approved' where id = '${appeal}'`); return {rows: r.affectedRows ? [1] : [], affectedRows: r.affectedRows}; });
+await ok("other workers can't see the appeal", async () => { const r = await as('w1', 'aal1', `select * from appeals`); if (r.rows.length) throw new Error('leak'); return 0; });
+await denied('admin without authenticator code cannot decide appeals', () => as('admin', 'aal1', `select admin_review_appeal('${appeal}', true, 'ok')`));
+await ok('admin sees the appeal queue', async () => (await as('admin', 'aal2', `select email, reason, total_strikes from admin_appeals('pending')`)).rows.map(r => `${r.email} (${r.total_strikes} strikes)`).join());
+await ok('admin approves → account restored', async () => { await as('admin', 'aal2', `select admin_review_appeal('${appeal}', true, 'Approved. Please give notice next time.')`); return JSON.stringify(await strikesOf('w2')); });
+await ok('restored worker can pick up shifts again', async () => pick('w2', await post(13)));
+await ok('3 more cancellations → suspended again', async () => { for (const d of [14, 15, 16]) { const app = await pick('w2', await post(d)); await as('w2', 'aal1', `update applications set status = 'withdrawn' where id = '${app}'`); } return JSON.stringify(await strikesOf('w2')); });
+await ok('business releasing a worker is not a strike for the worker', async () => { const app = await pick('w1', await post(20)); await as('biz', 'aal1', `update applications set status = 'declined' where id = '${app}'`); return JSON.stringify(await strikesOf('w1')); });
+await ok('dashboard shows reliability numbers', async () => JSON.stringify((await as('ceo', 'aal2', `select admin_stats(30) s`)).rows[0].s.reliability));
+
 console.log(`\n${pass} passed, ${fail} failed`);
