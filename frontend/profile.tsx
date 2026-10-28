@@ -17,7 +17,7 @@ const SKILL_IDEAS = ['Customer service', 'Cash handling', 'Cooking', 'Cleaning',
 // What a profile page shows. Comes from profile_card() for other people, or is built from your own profile.
 export type Card = Partial<Profile> & {
   id: string; view?: 'worker' | 'business'; is_me?: boolean; member_since?: string; shifts_completed?: number; strikes_total?: number;
-  shifts_posted?: number; workers_hired?: number; shifts_paid?: number; blocked_by_me?: boolean;
+  shifts_posted?: number; workers_hired?: number; shifts_filled?: number; shifts_paid?: number; blocked_by_me?: boolean;
 };
 // Your own profile shown the way others see it: the worker side, or only the business side.
 export const ownCard = (p: Profile, view: 'worker' | 'business' = 'worker'): Card => view === 'business'

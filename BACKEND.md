@@ -19,6 +19,7 @@ Do these steps once, in order. Nothing here needs a terminal except step 5.
 | `supabase/migrations/20261028180000_one_mode_at_a_time.sql` | One mode at a time: Working or Hiring, switched from the dashboard |
 | `supabase/migrations/20261028200000_rebook_blocks_business_profiles.sql` | Re-booking after cancellations, business blocks, permanent bans, business-only profiles |
 | `supabase/migrations/20261028220000_hide_released_shifts.sql` | Released workers no longer see that shift; blocked workers see none of that business’s shifts |
+| `supabase/migrations/20261028240000_count_people_not_bookings.sql` | Worker counts count people, not bookings |
 
 They keep all existing data. `supabase/repair-accounts.sql` fixes logins created before the database was set up.
 

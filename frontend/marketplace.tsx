@@ -255,7 +255,7 @@ function StatTile({icon: Icon, label, value, sub, tone}: {icon: React.ComponentT
 }
 
 type Summary = {worker: {upcoming: number; completed: number; earned_zar: number; held_zar: number; hours: number; next: any},
-  business: {open: number; upcoming: number; booked: number; hired_total: number; held_zar: number; awaiting: number; spent_zar: number}};
+  business: {open: number; upcoming: number; booked: number; booked_shifts?: number; hired_total: number; held_zar: number; awaiting: number; spent_zar: number}};
 function useSummary(sb: SupabaseClient) {
   const [s, setS] = useState<Summary | null>(null), [settings, setSettings] = useState<{strike_limit?: number; cancel_grace_minutes?: number; min_hourly_zar?: number}>({});
   useEffect(() => {
@@ -318,7 +318,7 @@ function BusinessOverview({sb, profile, go}: {sb: SupabaseClient; profile: Profi
     <div className="stack">
       <div className="stat-grid">
         <StatTile icon={Briefcase} tone="theme" label="Open shifts" value={b ? b.open : '–'} sub={b ? `${b.upcoming} upcoming in total` : ''}/>
-        <StatTile icon={Users} tone="green" label="Workers booked" value={b ? b.booked : '–'} sub={b ? `${b.hired_total} hired all-time` : ''}/>
+        <StatTile icon={Users} tone="green" label="Workers booked" value={b ? b.booked : '–'} sub={b ? `${b.booked_shifts ?? b.booked} upcoming ${(b.booked_shifts ?? b.booked) === 1 ? 'booking' : 'bookings'} · ${b.hired_total} different ${b.hired_total === 1 ? 'person' : 'people'} hired` : ''}/>
         <StatTile icon={ShieldCheck} tone="blue" label="Held in escrow" value={b ? money(b.held_zar) : '–'} sub="Released after each shift"/>
         <StatTile icon={Banknote} tone={b?.awaiting ? 'amber' : 'green'} label="Spent on shifts" value={b ? money(b.spent_zar) : '–'} sub={b?.awaiting ? `${b.awaiting} booking${b.awaiting > 1 ? 's' : ''} waiting for payment` : 'Including service fees'}/>
       </div>
