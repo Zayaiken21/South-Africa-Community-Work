@@ -750,3 +750,4 @@ button.link { padding: 0; }
 .dash-avatar .avatar-circle:not(:has(img)) { background: rgba(255,255,255,.22); }
 @media (max-width: 720px) { .pv-title { padding-top: 10px; flex-basis: 100%; } .profile-view.compact .pv-title { padding-top: 6px; } }
 .link.danger { color: var(--red); }
+.mode-row { flex-wrap: wrap; } .mode-row > div { min-width: 180px; }
