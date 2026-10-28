@@ -37,8 +37,25 @@ export function AccountPage() {
   if (!acct.ready) return <div className="page"><div className="card-panel center"><span className="spinner"/>Loading…</div></div>;
   if (!acct.sb) return <NotConfigured/>;
   if (acct.recovery) return <div className="page reading"><NewPassword sb={acct.sb}/></div>;
-  if (!acct.session || !acct.profile) return <div className="page reading"><AuthForm sb={acct.sb}/></div>;
+  if (!acct.session) return <div className="page reading"><AuthForm sb={acct.sb}/></div>;
+  if (!acct.profile) return <MissingProfile sb={acct.sb} email={acct.session.user.email || ''} reload={acct.reload}/>;
   return <Dashboard sb={acct.sb} profile={acct.profile} email={acct.session.user.email || ''} staff={acct.staff} reload={acct.reload}/>;
+}
+
+// Signed in, but the database has no profile for this login (e.g. the account was made before the database was set up).
+function MissingProfile({sb, email, reload}: {sb: SupabaseClient; email: string; reload: () => void}) {
+  return (
+    <div className="page reading">
+      <section className="card-panel auth">
+        <h1>You’re signed in</h1>
+        <p className="muted">{email} is signed in, but your profile couldn’t be loaded. This happens to accounts created before Community Work finished setting up. Our team can repair it; then tap “Try again”.</p>
+        <div className="row-gap">
+          <button className="btn btn-primary" onClick={reload}>Try again</button>
+          <button className="btn btn-outline" onClick={() => sb.auth.signOut().then(reload)}><LogOut size={16}/>Sign out</button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function AuthForm({sb}: {sb: SupabaseClient}) {
