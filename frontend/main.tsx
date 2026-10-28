@@ -11,7 +11,7 @@ import {Avatar, ProfilePage} from './profile';
 import {modes} from './backend';
 import {useAccount} from './backend';
 import {consent, gaConfigured, startTracking} from './analytics';
-import {API, money, savedJobs, setSavedJobs, toggleSaved, type CommunityJob, type SavedJob} from './catalog';
+import {API, money, milesLabel, savedJobs, setSavedJobs, toggleSaved, type CommunityJob, type SavedJob} from './catalog';
 import {AdSlot, HangingOffer, initAds} from './ads';
 import './app.css';
 
@@ -227,7 +227,7 @@ function Detail() {
                 <p className="muted">{job.payType === 'hour' ? `About ${money(job.pay * job.hours)} for the shift` : `About ${money(job.hourly)} per hour`}</p>
                 <div className="stat-row">
                   <span><Clock size={17}/>{job.hours} hours</span>
-                  <span><Navigation size={17}/>{job.distance.toFixed(1)} km away</span>
+                  <span><Navigation size={17}/>{milesLabel(job.distance)} away</span>
                   <span><MapPin size={17}/>{job.city}</span>
                 </div>
                 <h3>About this job</h3>

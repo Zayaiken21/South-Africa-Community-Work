@@ -10,13 +10,12 @@ import {AdSlot} from './ads';
 import {Fragment} from 'react';
 import {
   API, FEED_URL, DATA_BASE, provinceOf, slugOf, browseCategories, money, ago, when, distanceKm, readStore, writeStore, savedJobs, toggleSaved,
-  type Location, type CommunityJob, type Feed, type FeedJob, type JobIndex, type Listing,
-} from './catalog';
+  type Location, type CommunityJob, type Feed, type FeedJob, type JobIndex, type Listing, milesLabel, milesToKm} from './catalog';
 export {LocationPicker} from './LocationPicker';
 
 type Mode = 'all' | 'onsite' | 'remote';
-const radii = [10, 25, 50, 100, 200, 0];
-const radiusLabel = (r: number) => r ? `${r} km` : 'Anywhere in SA';
+const radii = [5, 15, 30, 60, 120, 0]; // miles
+const radiusLabel = (r: number) => r ? `${r} miles` : 'Anywhere in SA';
 const PAGE = 24;
 
 // ---------- Shared location state (auto-detect once, then remember) ----------
@@ -95,7 +94,7 @@ function useCommunityJobs(location: Location | null, radius: number, refresh: nu
     if (!location) { setJobs([]); return; }
     const ctrl = new AbortController();
     setLoading(true); setError('');
-    const p = new URLSearchParams({lat: String(location.lat), lon: String(location.lon), radius: String(radius || 200), sort: 'distance'});
+    const p = new URLSearchParams({lat: String(location.lat), lon: String(location.lon), radius: String(radius ? milesToKm(radius) : 200), sort: 'distance'});
     fetch(API + '?' + p, {signal: ctrl.signal})
       .then(async r => { const d: any = await r.json(); if (!r.ok) throw Error(d.error || 'Community jobs could not load.'); setJobs(d.jobs || []); })
       .catch(e => { if (!ctrl.signal.aborted) { setError(e.message); setJobs([]); } })
@@ -129,7 +128,7 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
   const initialMode = (new URLSearchParams(window.location.search).get('mode') as Mode) || 'all';
   const {location, locating, reason, choose} = useAreaLocation();
   const [mode, setMode] = useState<Mode>(['all', 'onsite', 'remote'].includes(initialMode) ? initialMode : 'all');
-  const [radius, setRadius] = useState<number>(() => readStore('cw-radius-v2', 0));
+  const [radius, setRadius] = useState<number>(() => readStore('cw-radius-mi', 0));
   const [category, setCategory] = useState('');
   const [query, setQuery] = useState('');
   const [minPay, setMinPay] = useState('');
@@ -142,7 +141,7 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
   const {feed, index, feedError, loadingMore, loadAll, allLoaded} = useFeed({location, mode, category, query});
   const {community, communityLoading, communityError} = useCommunityJobs(location, radius, refresh);
 
-  useEffect(() => writeStore('cw-radius-v2', radius), [radius]);
+  useEffect(() => writeStore('cw-radius-mi', radius), [radius]);
   useEffect(() => setShown(PAGE), [mode, radius, category, query, minPay, sort, location]);
   useEffect(() => {
     const sync = () => setSaved(new Set(savedJobs().map(s => s.key)));
@@ -165,7 +164,7 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
       if (q && !`${l.title} ${l.company} ${l.place} ${l.excerpt}`.toLowerCase().includes(q)) return false;
       if (min && !(l.hourly && l.hourly >= min)) return false;
       if (l.mode === 'onsite' && location && radius && l.kind === 'feed') {
-        if (l.distance == null || l.distance > radius) return false;
+        if (l.distance == null || l.distance > milesToKm(radius)) return false;
       }
       return true;
     });
@@ -276,7 +275,7 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
           <div className="results-bar">
             <span>
               <strong>{loading ? 'Loading jobs…' : `${list.length.toLocaleString('en-ZA')} ${list.length === 1 ? 'job' : 'jobs'}`}</strong>
-              {location && mode !== 'remote' && <span className="muted"> · {radius ? `within ${radius} km of ${area}` : `nearest to ${area}`}</span>}
+              {location && mode !== 'remote' && <span className="muted"> · {radius ? `within ${radius} miles of ${area}` : `nearest to ${area}`}</span>}
               {(communityLoading || loadingMore) && <LoaderCircle className="spin inline" size={14}/>}
               {index && index.total > list.length && <span className="muted total-note">{index.total.toLocaleString('en-ZA')} live jobs across SA · updated {ago(Date.parse(index.updated)).toLowerCase()}</span>}
             </span>
@@ -427,7 +426,7 @@ function JobCard({job, saved, onSave}: {job: Listing; saved: boolean; onSave: ()
       {job.excerpt && <p className="excerpt">{job.excerpt}</p>}
       <div className="meta">
         <span title={job.place}><MapPin size={14}/>{job.place}</span>
-        {job.distance != null && job.mode === 'onsite' && <span><Navigation size={14}/>{job.distance < 1 ? '<1' : job.distance.toFixed(job.distance < 10 ? 1 : 0)} km</span>}
+        {job.distance != null && job.mode === 'onsite' && <span><Navigation size={14}/>{milesLabel(job.distance)} away</span>}
         <span>{job.dateLabel}</span>
       </div>
       <div className="card-foot">
@@ -492,6 +491,7 @@ export function PostForm({onDone}: {onDone: () => void}) {
     const body: any = Object.fromEntries(f.entries());
     delete body.confirm;
     for (const k of ['pay', 'hours', 'radius']) body[k] = Number(body[k]);
+    body.radius = milesToKm(body.radius);
     body.latitude = spot.lat; body.longitude = spot.lon;
     body.start = String(body.start) + ':00+02:00';
     try {
@@ -539,7 +539,7 @@ export function PostForm({onDone}: {onDone: () => void}) {
           </select>
         </label>
       </div>
-      <label className="field">Hire people within (km)<input name="radius" type="number" inputMode="numeric" min="1" max="200" defaultValue="25" required/></label>
+      <label className="field">Hire people within (miles)<input name="radius" type="number" inputMode="numeric" min="1" max="120" defaultValue="15" required/></label>
 
       <h2 className="form-step"><span>3</span>Pay and time</h2>
       <div className="grid-2">

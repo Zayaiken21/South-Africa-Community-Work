@@ -751,3 +751,8 @@ button.link { padding: 0; }
 @media (max-width: 720px) { .pv-title { padding-top: 10px; flex-basis: 100%; } .profile-view.compact .pv-title { padding-top: 6px; } }
 .link.danger { color: var(--red); }
 .mode-row { flex-wrap: wrap; } .mode-row > div { min-width: 180px; }
+.shift-card { min-width: 0; }
+.shift-card .card-head { min-width: 0; }
+.shift-card .card-title { flex: 1 1 auto; min-width: 0; }
+.shift-card .card-title p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 720px) { .spots { font-size: 11.5px; padding: 3px 8px; } }
