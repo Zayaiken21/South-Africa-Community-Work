@@ -7,6 +7,8 @@
 //   gh  = Greenhouse         lever = Lever (US and EU)     sr = SmartRecruiters
 //   wk  = Workable           ashby = Ashby                 rc = Recruitee          bamboo = BambooHR
 //
+//   wd  = Workday (listed separately below, because each needs its exact address)
+//
 // Names are tried as written (SmartRecruiters ids are case-sensitive) and in lower case without spaces.
 
 export const knownBoards = [
@@ -40,3 +42,16 @@ truworths edcon jet foschini sportscene totalsports
 gijima eohholdings datatec westcon mustek dataprotect
 ubuntu canonical
 `.split(/\s+/).filter(Boolean);
+
+// Workday career sites: tenant, data centre (the "wd3" in tenant.wd3.myworkdayjobs.com) and site name from the careers page address.
+// sa: true means every job there is in South Africa (used when Workday only says "2 Locations").
+export const workdayBoards = [
+  {tenant: 'picknpay', dc: 'wd3', site: 'PNP_Careers', company: 'Pick n Pay', sa: true},
+  {tenant: 'absa', dc: 'wd3', site: 'ABSAcareersite', company: 'Absa'},
+  {tenant: 'oldmutual', dc: 'wd3', site: 'Old_Mutual_Careers', company: 'Old Mutual'},
+  {tenant: 'tigerbrands', dc: 'wd103', site: 'TigerBrands', company: 'Tiger Brands', sa: true},
+  {tenant: 'mimecast', dc: 'wd5', site: 'Mimecast-Careers', company: 'Mimecast'},
+  {tenant: 'avon', dc: 'wd5', site: 'AvonCareers', company: 'Avon'},
+  {tenant: 'henryschein', dc: 'wd1', site: 'External_Careers', company: 'Henry Schein'},
+  {tenant: 'mrisoftware', dc: 'wd501', site: 'External_CareerSite', company: 'MRI Software'},
+];

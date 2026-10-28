@@ -1,7 +1,7 @@
 // In-person South African jobs straight from employers' public hiring-system feeds (no keys needed).
 // See sa-employers.mjs for the list of employers that are tried.
 
-import {employers, knownBoards} from './sa-employers.mjs';
+import {employers, knownBoards, workdayBoards} from './sa-employers.mjs';
 
 const UA = 'CommunityWorkSA/1.0 (+https://github.com/Zayaiken21/South-Africa-Community-Work)';
 const WEEK = 7 * 864e5;
@@ -39,6 +39,7 @@ const systems = {
     for (let offset = 0; offset < 1000; offset += 100) {
       const d = await get(`https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(name)}/postings?limit=100&offset=${offset}&country=za`);
       if (!d || !Array.isArray(d.content)) return offset ? out : null;
+      if (!offset && !d.totalFound && !d.content.length) return null;                // SmartRecruiters answers for any name; empty means no such company
       for (const j of d.content) {
         const l = j.location || {};
         out.push({id: `sr:${name}:${j.id}`, title: j.name, company: j.company?.name || prettify(name), url: `https://jobs.smartrecruiters.com/${name}/${j.id}`,
@@ -50,6 +51,8 @@ const systems = {
     return out;
   },
   async wk(name) {
+    if (wkLimited || ++wkCount > Number(process.env.WORKABLE_PER_RUN || 60)) return undefined;   // the rest wait for later runs
+    await wkTurn();
     const out = [];
     let token = null;
     for (let page = 0; page < 10; page++) {
@@ -90,6 +93,10 @@ const systems = {
   },
 };
 
+// Workable limits how fast it can be asked: one request at a time, 1.5 s apart, and stop for this run on a 429.
+let wkLimited = false, wkCount = 0, wkChain = Promise.resolve();
+const wkTurn = () => (wkChain = wkChain.then(() => new Promise(res => setTimeout(res, Number(process.env.WORKABLE_DELAY_MS ?? 1500)))));
+
 const decode = s => String(s || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 const prettify = s => s.replace(/[-_]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, c => c.toUpperCase());
 
@@ -119,23 +126,54 @@ async function pool(items, fn) {
   return results;
 }
 
+// Workday: each site is read page by page (20 jobs a page).
+function workdayDate(t) {
+  const s = String(t || '').toLowerCase(), d = Date.now();
+  if (/today/.test(s)) return new Date(d).toISOString();
+  if (/yesterday/.test(s)) return new Date(d - 864e5).toISOString();
+  const m = s.match(/(\d+)\+?\s*days?/); return new Date(d - (m ? Number(m[1]) : 0) * 864e5).toISOString();
+}
+async function workday(b) {
+  const base = `https://${b.tenant}.${b.dc}.myworkdayjobs.com`;
+  const out = [];
+  for (let offset = 0; offset < Number(process.env.WORKDAY_MAX || 2000); offset += 20) {
+    const d = await get(`${base}/wday/cxs/${b.tenant}/${b.site}/jobs`, {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({appliedFacets: {}, limit: 20, offset, searchText: ''})});
+    if (!d || !Array.isArray(d.jobPostings)) return offset ? out : null;
+    for (const j of d.jobPostings) {
+      if (!j.title || !j.externalPath) continue;
+      out.push({id: `wd:${b.tenant}:${j.bulletFields?.[0] || j.externalPath}`, title: j.title, company: b.company, url: `${base}/en-US/${b.site}${j.externalPath}`,
+        location: j.locationsText || '', posted: workdayDate(j.postedOn), saSite: !!b.sa});
+    }
+    if (d.jobPostings.length < 20 || offset + 20 >= (d.total || 0)) break;
+    await new Promise(res => setTimeout(res, 250));
+  }
+  return out;
+}
+
 export async function atsJobs(state, h) {
   const health = state.ats ||= {};
   const {good, probe} = plan(state);
   const jobs = [];
   let boardsWithSA = 0, found = 0;
-  await pool([...good, ...probe], async key => {
+  const wdKeys = workdayBoards.map(b => `wd:${b.tenant}:${b.site}`);
+  await pool([...wdKeys, ...good, ...probe], async key => {
     const [sys, ...rest] = key.split(':'), name = rest.join(':');
     let list = null;
-    try { list = await systems[sys](name); }
-    catch (e) { health[key] = {...health[key], checked: Date.now(), error: String(e.message).slice(0, 80)}; return; }
+    try { list = sys === 'wd' ? await workday(workdayBoards.find(b => `wd:${b.tenant}:${b.site}` === key)) : await systems[sys](name); }
+    catch (e) {
+      if (sys === 'wk' && /\b429\b/.test(e.message)) { wkLimited = true; return; }   // try again next run
+      health[key] = {...health[key], checked: Date.now(), error: String(e.message).slice(0, 80)}; return;
+    }
+    if (list === undefined) return;                                                  // skipped this run
     if (!list) { health[key] = {ok: false, checked: Date.now()}; return; }
     found++;
     let sa = 0;
     for (const j of list) {
       if (!j.title || !j.url) continue;
-      const where = String(j.location || '');
+      let where = String(j.location || '');
       const remoteSA = j.remote && /south africa|\bza\b/i.test(where);
+      if (j.saSite && !h.isSouthAfrican(where)) where = /^\d+ locations?$/i.test(where) || !where ? 'South Africa' : `${where}, South Africa`;
       if (!h.isSouthAfrican(where) && !remoteSA) continue;
       sa++;
       const remote = !!j.remote || /\bremote\b|work from home/i.test(where);

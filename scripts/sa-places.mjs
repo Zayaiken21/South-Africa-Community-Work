@@ -26,6 +26,37 @@ export const places = [
   ['Klerksdorp', 'North West', -26.8521, 26.6667], ['Brits', 'North West', -25.6347, 27.7802],
   ['Kimberley', 'Northern Cape', -28.7282, 24.7499], ['Upington', 'Northern Cape', -28.4478, 21.2561], ['Springbok', 'Northern Cape', -29.6643, 17.8865],
   ['Kathu', 'Northern Cape', -27.6957, 23.0490],
+  // More towns and suburbs that employers list (added Oct 2026).
+  ['Durbanville', 'Western Cape', -33.8326, 18.6474], ['Parow', 'Western Cape', -33.9000, 18.5833], ['Brackenfell', 'Western Cape', -33.8792, 18.6950],
+  ['Kuils River', 'Western Cape', -33.9289, 18.6814], ['Milnerton', 'Western Cape', -33.8770, 18.4950], ['Table View', 'Western Cape', -33.8220, 18.4890],
+  ['Claremont', 'Western Cape', -33.9810, 18.4650], ['Wynberg', 'Western Cape', -34.0030, 18.4680], ['Mitchells Plain', 'Western Cape', -34.0440, 18.6170],
+  ['Khayelitsha', 'Western Cape', -34.0400, 18.6770], ['Strand', 'Western Cape', -34.1100, 18.8270], ['Hermanus', 'Western Cape', -34.4187, 19.2345],
+  ['Oudtshoorn', 'Western Cape', -33.5900, 22.2010], ['Plettenberg Bay', 'Western Cape', -34.0527, 23.3716], ['Vredenburg', 'Western Cape', -32.9060, 17.9900],
+  ['Saldanha', 'Western Cape', -33.0110, 17.9440], ['Malmesbury', 'Western Cape', -33.4610, 18.7270], ['Wellington', 'Western Cape', -33.6390, 19.0110],
+  ['Franschhoek', 'Western Cape', -33.9130, 19.1210], ['Century City', 'Western Cape', -33.8920, 18.5110], ['Tygervalley', 'Western Cape', -33.8740, 18.6330],
+  ['Edenvale', 'Gauteng', -26.1410, 28.1520], ['Bedfordview', 'Gauteng', -26.1790, 28.1360], ['Northcliff', 'Gauteng', -26.1450, 27.9690],
+  ['Braamfontein', 'Gauteng', -26.1930, 28.0350], ['Hatfield', 'Gauteng', -25.7480, 28.2370], ['Menlyn', 'Gauteng', -25.7830, 28.2770],
+  ['Akasia', 'Gauteng', -25.6750, 28.1100], ['Soshanguve', 'Gauteng', -25.5200, 28.1000], ['Mamelodi', 'Gauteng', -25.7100, 28.3600],
+  ['Tembisa', 'Gauteng', -25.9960, 28.2270], ['Randfontein', 'Gauteng', -26.1840, 27.7020], ['Carletonville', 'Gauteng', -26.3600, 27.3970],
+  ['Heidelberg', 'Gauteng', -26.5040, 28.3590], ['Nigel', 'Gauteng', -26.4310, 28.4770], ['Bryanston', 'Gauteng', -26.0520, 28.0230],
+  ['Sunninghill', 'Gauteng', -26.0330, 28.0610], ['Woodmead', 'Gauteng', -26.0480, 28.0920], ['Lonehill', 'Gauteng', -26.0110, 28.0260],
+  ['Honeydew', 'Gauteng', -26.0670, 27.9230], ['Lenasia', 'Gauteng', -26.3150, 27.8350], ['Diepsloot', 'Gauteng', -25.9330, 28.0120],
+  ['Isando', 'Gauteng', -26.1440, 28.2050], ['Waterfall', 'Gauteng', -26.0040, 28.0960], ['Parktown', 'Gauteng', -26.1800, 28.0360],
+  ['Westville', 'KwaZulu-Natal', -29.8320, 30.9300], ['Amanzimtoti', 'KwaZulu-Natal', -30.0560, 30.8800], ['Chatsworth', 'KwaZulu-Natal', -29.9100, 30.8800],
+  ['Umlazi', 'KwaZulu-Natal', -29.9700, 30.8900], ['Phoenix', 'KwaZulu-Natal', -29.7000, 31.0000], ['Verulam', 'KwaZulu-Natal', -29.6430, 31.0480],
+  ['Tongaat', 'KwaZulu-Natal', -29.5700, 31.1200], ['Scottburgh', 'KwaZulu-Natal', -30.2860, 30.7530], ['Howick', 'KwaZulu-Natal', -29.4770, 30.2290],
+  ['Margate', 'KwaZulu-Natal', -30.8630, 30.3710], ['Kokstad', 'KwaZulu-Natal', -30.5470, 29.4270], ['Estcourt', 'KwaZulu-Natal', -29.0090, 29.8740],
+  ['Vryheid', 'KwaZulu-Natal', -27.7690, 30.7920], ['Empangeni', 'KwaZulu-Natal', -28.7620, 31.8930], ['Hillcrest', 'KwaZulu-Natal', -29.7810, 30.7620],
+  ['Kloof', 'KwaZulu-Natal', -29.7900, 30.8300],
+  ['Komani', 'Eastern Cape', -31.8980, 26.8750], ['Queenstown', 'Eastern Cape', -31.8980, 26.8750], ['Jeffreys Bay', 'Eastern Cape', -34.0330, 24.9200],
+  ['Graaff-Reinet', 'Eastern Cape', -32.2520, 24.5310], ['Qonce', 'Eastern Cape', -32.8830, 27.4000], ['King William', 'Eastern Cape', -32.8830, 27.4000],
+  ['Parys', 'Free State', -26.9010, 27.4560], ['Harrismith', 'Free State', -28.2750, 29.1290], ['Phuthaditjhaba', 'Free State', -28.5240, 28.8160],
+  ['Makhado', 'Limpopo', -23.0430, 29.9030], ['Louis Trichardt', 'Limpopo', -23.0430, 29.9030], ['Bela-Bela', 'Limpopo', -24.8850, 28.2930],
+  ['Phalaborwa', 'Limpopo', -23.9430, 31.1410], ['Modimolle', 'Limpopo', -24.7000, 28.4000],
+  ['Ermelo', 'Mpumalanga', -26.5330, 29.9830], ['Standerton', 'Mpumalanga', -26.9500, 29.2400], ['White River', 'Mpumalanga', -25.3300, 31.0100],
+  ['Hazyview', 'Mpumalanga', -25.0440, 31.1270], ['Barberton', 'Mpumalanga', -25.7860, 31.0530], ['Lydenburg', 'Mpumalanga', -25.0950, 30.4500],
+  ['Vryburg', 'North West', -26.9570, 24.7280], ['Zeerust', 'North West', -25.5370, 26.0750], ['Hartbeespoort', 'North West', -25.7470, 27.8510],
+  ['De Aar', 'Northern Cape', -30.6500, 24.0120], ['Kuruman', 'Northern Cape', -27.4520, 23.4320],
 ];
 
 export const provinceCentres = {
@@ -35,14 +66,18 @@ export const provinceCentres = {
 };
 
 // Find coordinates for a location string like "Sandton, Gauteng" or "Durban North".
+const reCache = new Map();
+const placeRe = name => { let re = reCache.get(name); if (!re) { re = new RegExp(`(^|[^a-z])${name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z])`); reCache.set(name, re); } return re; };
+
 export function placeFor(text) {
   const t = String(text || '').toLowerCase();
   if (!t) return null;
   // The first place named is usually the most specific ("Sandton, Johannesburg" → Sandton).
   let best = null;
   for (const [name, province, lat, lon] of places) {
-    const at = t.indexOf(name.toLowerCase());
-    if (at < 0) continue;
+    const m = t.match(placeRe(name));                     // whole words only: "Durban" must not match "Durbanville"
+    if (!m) continue;
+    const at = m.index + m[1].length;
     if (!best || at < best.at || (at === best.at && name.length > best.name.length)) best = {name, province, lat, lon, at};
   }
   if (best) return best;
