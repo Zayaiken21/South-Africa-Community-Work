@@ -136,6 +136,7 @@ function workdayDate(t) {
 async function workday(b) {
   const base = `https://${b.tenant}.${b.dc}.myworkdayjobs.com`;
   const out = [];
+  let total = 0;                                                               // Workday only sends the total on the first page
   for (let offset = 0; offset < Number(process.env.WORKDAY_MAX || 2000); offset += 20) {
     const d = await get(`${base}/wday/cxs/${b.tenant}/${b.site}/jobs`, {method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({appliedFacets: {}, limit: 20, offset, searchText: ''})});
@@ -145,7 +146,8 @@ async function workday(b) {
       out.push({id: `wd:${b.tenant}:${j.bulletFields?.[0] || j.externalPath}`, title: j.title, company: b.company, url: `${base}/en-US/${b.site}${j.externalPath}`,
         location: j.locationsText || '', posted: workdayDate(j.postedOn), saSite: !!b.sa});
     }
-    if (d.jobPostings.length < 20 || offset + 20 >= (d.total || 0)) break;
+    if (d.total) total = d.total;
+    if (d.jobPostings.length < 20 || (total && offset + 20 >= total)) break;
     await new Promise(res => setTimeout(res, 250));
   }
   return out;
