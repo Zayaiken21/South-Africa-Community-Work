@@ -3,7 +3,7 @@ import type {SupabaseClient} from '@supabase/supabase-js';
 import {
   UserRound, Building2, LogOut, LoaderCircle, Check, X, Plus, MapPin, Clock, ShieldCheck, FileText, Wallet,
   CalendarDays, Users, BadgeCheck, Search, BarChart3, Activity, KeyRound, ArrowUpRight, Banknote, Lock, RefreshCw, Briefcase, Eye,
-  LayoutDashboard, Settings, Sparkles, Palette, Globe, ArrowRight, CheckCircle2, Repeat, Ban, Zap, AlertTriangle, Gavel, TrendingUp, MousePointerClick,
+  LayoutDashboard, Settings, Trash2, Sparkles, Palette, Globe, ArrowRight, CheckCircle2, Repeat, Ban, Zap, AlertTriangle, Gavel, TrendingUp, MousePointerClick,
 } from 'lucide-react';
 import {useAccount, callFunction, errorText, modes, type Profile} from './backend';
 import {Avatar, ProfileEditor} from './profile';
@@ -42,7 +42,14 @@ export function AccountPage() {
   if (acct.recovery) return <div className="page reading"><NewPassword sb={acct.sb}/></div>;
   if (!acct.session) return <div className="page reading"><AuthForm sb={acct.sb}/></div>;
   if (!acct.profile) return <MissingProfile sb={acct.sb} email={acct.session.user.email || ''} reload={acct.reload}/>;
-  return <Dashboard sb={acct.sb} profile={acct.profile} email={acct.session.user.email || ''} staff={acct.staff} reload={acct.reload}/>;
+  return <TwoStepGate sb={acct.sb} token={acct.session.access_token} reload={acct.reload}><Dashboard sb={acct.sb} profile={acct.profile} email={acct.session.user.email || ''} staff={acct.staff} reload={acct.reload}/></TwoStepGate>;
+}
+
+function TwoStepGate({sb, token, reload, children}: {sb: SupabaseClient; token: string; reload: () => void; children: React.ReactNode}) {
+  const two = useTwoStep(sb, token);
+  if (two.loading) return <div className="page"><div className="card-panel center"><span className="spinner"/></div></div>;
+  if (two.verify) return <div className="page reading"><TwoFactor sb={sb} onDone={() => { two.refresh(); reload(); }} onCancel={() => sb.auth.signOut().then(reload)}/></div>;
+  return <>{children}</>;
 }
 
 // Signed in, but the database has no profile for this login (e.g. the account was made before the database was set up).
@@ -360,6 +367,7 @@ function AccountSettings({sb, profile, email, reload}: {sb: SupabaseClient; prof
           )}
           {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
         </section>
+        <TwoStepCard sb={sb}/>
         <section className="card-panel section-card">
           <header className="sec-head"><KeyRound size={18}/><div><h2>Sign-in</h2><p>{email}</p></div></header>
           <form className="form" onSubmit={async e => {
@@ -381,6 +389,36 @@ function AccountSettings({sb, profile, email, reload}: {sb: SupabaseClient; prof
         <a className="link" href="privacy.html">Privacy details <ArrowRight size={15}/></a>
       </aside>
     </div>
+  );
+}
+
+function TwoStepCard({sb}: {sb: SupabaseClient}) {
+  const [factor, setFactor] = useState<string | null | undefined>(undefined), [setup, setSetup] = useState(false);
+  const [required, setRequired] = useState(false), [msg, setMsg] = useState<{kind: 'error' | 'ok'; text: string} | null>(null);
+  const load = () => {
+    sb.auth.mfa.listFactors().then(({data}) => setFactor(data?.totp?.find(f => f.status === 'verified')?.id ?? null));
+    Promise.all([sb.from('staff').select('role').maybeSingle(), sb.rpc('public_settings')]).then(([{data: st}, {data: s}]) => setRequired(!!st && !!(s as any)?.require_staff_mfa));
+  };
+  useEffect(load, []);
+  if (setup) return <TwoFactor sb={sb} onDone={() => { setSetup(false); setMsg({kind: 'ok', text: 'Two-step sign-in is on.'}); load(); }} onCancel={() => setSetup(false)}/>;
+  return (
+    <section className="card-panel section-card">
+      <header className="sec-head"><ShieldCheck size={18}/><div><h2>Two-step sign-in</h2><p>Optional. Ask for a 6-digit code from an authenticator app each time you sign in.</p></div></header>
+      <div className="mode-row">
+        <span className="mode-ic"><KeyRound size={20}/></span>
+        <div><strong>{factor ? 'On' : 'Off'}</strong><small>{factor ? 'Your account needs your password and a code from your phone.' : 'Recommended for business owners and the team, especially when money is involved.'}</small></div>
+        {factor === undefined ? <span className="spinner"/> : factor
+          ? <button className="btn btn-outline btn-sm" disabled={required} title={required ? 'Required for the Community Work team' : undefined} onClick={async () => {
+              if (!confirm('Turn off two-step sign-in? Your password alone will be enough to sign in.')) return;
+              const {error} = await sb.auth.mfa.unenroll({factorId: factor});
+              setMsg(error ? {kind: 'error', text: /aal2|assurance/i.test(error.message) ? 'Sign out and back in with your code first, then turn it off.' : error.message} : {kind: 'ok', text: 'Two-step sign-in is off.'});
+              if (!error) { await sb.auth.refreshSession(); load(); }
+            }}>Turn off</button>
+          : <button className="btn btn-primary btn-sm themed" onClick={() => { setMsg(null); setSetup(true); }}>Turn on</button>}
+      </div>
+      {required && factor && <p className="muted small">Community Work requires two-step sign-in for team accounts.</p>}
+      {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
+    </section>
   );
 }
 
@@ -723,8 +761,12 @@ function BusinessShifts({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
               })}
             </div>
           )}
-          {s.status === 'open' && !s.apps.some(a => ['accepted', 'completed'].includes(a.status)) &&
-            <button className="link" onClick={async () => { if (confirm('Delete this shift?')) { await sb.from('shifts').delete().eq('id', s.id); load(); } }}>Delete shift</button>}
+          {!s.apps.some(a => ['accepted', 'completed', 'no_show'].includes(a.status) || a.payment) &&
+            <button className="link danger" onClick={async () => {
+              if (!confirm('Delete this shift? It’s removed completely, including any cancelled bookings. This can’t be undone.')) return;
+              const {error} = await sb.from('shifts').delete().eq('id', s.id);
+              if (error) alert(error.message); load();
+            }}><Trash2 size={14}/>Delete shift</button>}
         </article>
       ))}
     </div>
@@ -850,27 +892,40 @@ export function ShiftsPage() {
 }
 
 // ===================================================================== CEO / admin dashboard
+// Two-step sign-in state for this session: 'verify' = authenticator is on and its code hasn't been entered yet.
+function useTwoStep(sb: SupabaseClient | null, token?: string) {
+  const [state, setState] = useState<{loading: boolean; verify: boolean; enrolled: boolean; required: boolean}>({loading: true, verify: false, enrolled: false, required: false});
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!sb || !token) { setState(s => ({...s, loading: false})); return; }
+    Promise.all([sb.auth.mfa.getAuthenticatorAssuranceLevel(), sb.rpc('public_settings')]).then(([{data}, {data: st}]) => setState({
+      loading: false, verify: data?.nextLevel === 'aal2' && data?.currentLevel !== 'aal2',
+      enrolled: data?.nextLevel === 'aal2', required: !!(st as any)?.require_staff_mfa,
+    }));
+  }, [sb, token, tick]);
+  return {...state, refresh: () => setTick(t => t + 1)};
+}
+
 export function AdminPage() {
   const acct = useAccount();
-  const [aal, setAal] = useState<'aal1' | 'aal2' | null>(null);
-  useEffect(() => { acct.sb?.auth.mfa.getAuthenticatorAssuranceLevel().then(({data}) => setAal((data?.currentLevel as any) ?? 'aal1')); }, [acct.sb, acct.session?.access_token]);
+  const two = useTwoStep(acct.sb, acct.session?.access_token);
   if (!acct.ready) return <div className="page"><div className="card-panel center"><span className="spinner"/></div></div>;
   if (!acct.sb) return <NotConfigured/>;
   if (!acct.session) return <div className="page reading"><Notice>Sign in with your staff account.</Notice><AuthForm sb={acct.sb}/></div>;
   if (!acct.staff) return <div className="page"><div className="empty"><h2>Staff only</h2><p>This area is for the Community Work team.</p><a className="btn btn-primary" href="account.html">My account</a></div></div>;
-  if (aal === null) return <div className="page"><div className="card-panel center"><span className="spinner"/></div></div>;
-  if (aal !== 'aal2') return <div className="page reading"><TwoFactor sb={acct.sb} onDone={() => { setAal('aal2'); acct.reload(); }}/></div>;
+  if (two.loading) return <div className="page"><div className="card-panel center"><span className="spinner"/></div></div>;
+  if (two.verify || (two.required && !two.enrolled)) return <div className="page reading"><TwoFactor sb={acct.sb} onDone={() => { two.refresh(); acct.reload(); }}/></div>;
   return <AdminConsole sb={acct.sb} role={acct.staff} me={acct.session.user.id}/>;
 }
 
-function TwoFactor({sb, onDone}: {sb: SupabaseClient; onDone: () => void}) {
+function TwoFactor({sb, onDone, onCancel}: {sb: SupabaseClient; onDone: () => void; onCancel?: () => void}) {
   const [factorId, setFactorId] = useState(''), [qr, setQr] = useState(''), [secret, setSecret] = useState(''), [err, setErr] = useState(''), [busy, setBusy] = useState(false);
   useEffect(() => {
     sb.auth.mfa.listFactors().then(async ({data}) => {
       const verified = data?.totp?.find(f => f.status === 'verified');
       if (verified) return setFactorId(verified.id);
       for (const f of data?.all ?? []) if (f.status !== 'verified') await sb.auth.mfa.unenroll({factorId: f.id});
-      const {data: e, error} = await sb.auth.mfa.enroll({factorType: 'totp', friendlyName: 'Community Work admin'});
+      const {data: e, error} = await sb.auth.mfa.enroll({factorType: 'totp', friendlyName: 'Community Work'});
       if (error || !e) return setErr(error?.message || 'Could not start authenticator setup. Refresh and try again.');
       setFactorId(e.id); setQr(e.totp.qr_code); setSecret(e.totp.secret);
     });
@@ -878,9 +933,9 @@ function TwoFactor({sb, onDone}: {sb: SupabaseClient; onDone: () => void}) {
   return (
     <section className="card-panel auth">
       <KeyRound size={26}/>
-      <h1>{qr ? 'Protect your admin account' : 'Enter your authenticator code'}</h1>
+      <h1>{qr ? 'Turn on two-step sign-in' : 'Enter your authenticator code'}</h1>
       {qr ? <>
-        <p className="muted">Scan this with Google Authenticator, Microsoft Authenticator or Authy. You’ll need a code from it every time you open the dashboard — even someone with your password can’t get in without your phone.</p>
+        <p className="muted">Scan this with Google Authenticator, Microsoft Authenticator or Authy. From now on you’ll enter a code from it when you sign in — even someone with your password can’t get in without your phone.</p>
         <img className="qr" src={qr} alt="Authenticator QR code" width={200} height={200}/>
         <p className="muted small">Can’t scan? Enter this key: <code>{secret}</code></p>
       </> : <p className="muted">Open your authenticator app and enter the 6-digit code for Community Work.</p>}
@@ -894,6 +949,7 @@ function TwoFactor({sb, onDone}: {sb: SupabaseClient; onDone: () => void}) {
         <label className="field">6-digit code<input name="code" inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} required autoFocus/></label>
         {err && <Notice kind="error">{err}</Notice>}
         <button className="btn btn-primary btn-block" disabled={busy || !factorId}>{busy && <LoaderCircle className="spin" size={18}/>}Verify</button>
+        {onCancel && <button type="button" className="btn btn-ghost btn-block" onClick={onCancel}>{qr ? 'Not now' : 'Sign out'}</button>}
       </form>
     </section>
   );
@@ -916,7 +972,7 @@ function AdminConsole({sb, role, me}: {sb: SupabaseClient; role: 'ceo' | 'admin'
           <div className="dash-id">
             <p className="dash-hello">{greeting()} · {role === 'ceo' ? 'CEO' : 'Admin'}</p>
             <h1>{role === 'ceo' ? 'CEO dashboard' : 'Admin dashboard'}</h1>
-            <p className="dash-sub"><Lock size={13}/> Protected with your authenticator</p>
+            <p className="dash-sub"><Lock size={13}/> Team only · every action is logged</p>
           </div>
           <div className="dash-actions inline">
             <a className="chip-link" href="https://analytics.google.com/" target="_blank" rel="noreferrer"><BarChart3 size={15}/>Analytics</a>
@@ -1141,7 +1197,7 @@ function SettingsAdmin({sb}: {sb: SupabaseClient}) {
     <form className="card-panel form narrow section-card" onSubmit={async e => {
       e.preventDefault();
       const f = new FormData(e.currentTarget);
-      const {error} = await sb.rpc('admin_set_settings', {p_min_hourly: Number(f.get('min')), p_fee_percent: Number(f.get('fee')), p_strike_limit: Number(f.get('strikes')), p_cancel_grace: Number(f.get('grace'))});
+      const {error} = await sb.rpc('admin_set_settings', {p_min_hourly: Number(f.get('min')), p_fee_percent: Number(f.get('fee')), p_strike_limit: Number(f.get('strikes')), p_cancel_grace: Number(f.get('grace')), p_require_mfa: f.get('mfa') === 'on'});
       setMsg(error ? {kind: 'error', text: error.message} : {kind: 'ok', text: 'Saved.'});
     }}>
       <header className="sec-head"><Settings size={18}/><div><h2>Platform settings</h2><p>Only the CEO can change these. Every change is logged.</p></div></header>
@@ -1153,9 +1209,28 @@ function SettingsAdmin({sb}: {sb: SupabaseClient}) {
         <label className="field">Strikes before suspension<input name="strikes" type="number" min={1} max={10} defaultValue={s.strike_limit ?? 3}/><small>Cancellations and no-shows. The count restarts after each approved appeal.</small></label>
         <label className="field">Free cancel window (minutes)<input name="grace" type="number" min={0} max={120} defaultValue={s.cancel_grace_minutes ?? 10}/><small>Cancelling this soon after picking up isn’t a strike. 0 turns it off.</small></label>
       </div>
+      <label className="check"><input type="checkbox" name="mfa" defaultChecked={!!s.require_staff_mfa}/><span><strong>Require two-step sign-in for all staff.</strong> Off by default: each person chooses in their account settings. Switch on your own first.</span></label>
       {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
       <button className="btn btn-primary">Save settings</button>
+      <CleanupCard sb={sb}/>
     </form>
+  );
+}
+
+function CleanupCard({sb}: {sb: SupabaseClient}) {
+  const [busy, setBusy] = useState(false), [res, setRes] = useState('');
+  return (
+    <div className="inline-form">
+      <strong>Database clean-up</strong>
+      <p className="muted small">Runs automatically every night. Removes shifts that ended over a week ago with nobody booked, old cancelled bookings, visitor tracking older than 13 months and decided appeals older than a year. Worked and paid shifts are always kept.</p>
+      <div className="row-gap start">
+        <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={async () => {
+          setBusy(true); const {data, error} = await sb.rpc('admin_cleanup'); setBusy(false);
+          setRes(error ? error.message : `Removed ${(data as any).shifts} shifts, ${(data as any).bookings} bookings, ${(data as any).events} tracking records, ${(data as any).appeals} appeals.`);
+        }}>{busy ? <LoaderCircle className="spin" size={15}/> : <Trash2 size={15}/>}Run clean-up now</button>
+      </div>
+      {res && <p className="small">{res}</p>}
+    </div>
   );
 }
 

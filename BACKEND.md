@@ -15,6 +15,7 @@ Do these steps once, in order. Nothing here needs a terminal except step 5.
 |---|---|
 | `supabase/migrations/20261028120000_shift_pickup_strikes.sql` | Workers pick up shifts themselves, strikes, suspension and appeals |
 | `supabase/migrations/20261028140000_dual_accounts_profiles.sql` | One account for working and hiring, profile photos, themes, detailed profiles |
+| `supabase/migrations/20261028160000_optional_2step_cleanup.sql` | Two-step sign-in becomes optional; deleting jobs; nightly clean-up of old data |
 
 They keep all existing data. `supabase/repair-accounts.sql` fixes logins created before the database was set up.
 
@@ -32,9 +33,11 @@ Supabase → **Authentication**:
 
 1. On the site, open **Sign in → Create account** and sign up with **zayaiken2001@gmail.com**.
 2. Confirm the email. That address automatically becomes **CEO**; nobody else can be made CEO.
-3. Open **admin.html** (also under **More → CEO dashboard**). Scan the QR code with Google Authenticator or Authy.
-   From then on, the dashboard and every money action need your password **and** a code from your phone.
-4. Add admins in **Team** (they must sign up first). Only the CEO can add or remove admins or change settings.
+3. Open **admin.html** (also under **More → CEO dashboard**).
+4. Optional but recommended: **Account → Settings → Two-step sign-in → Turn on** and scan the QR code with Google Authenticator
+   or Authy. Once on, signing in and every money action need your password **and** a code from your phone.
+   In **CEO dashboard → Settings** you can require it for every staff member.
+5. Add admins in **Team** (they must sign up first). Only the CEO can add or remove admins or change settings.
 
 ## 4. TradeSafe escrow
 

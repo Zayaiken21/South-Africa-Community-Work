@@ -15,7 +15,7 @@ The frontend calls the hosted jobs API at https://south-africa-community-work.ch
 - Worker and business accounts (Supabase): profile, bio, skills and a private CV upload.
 - Businesses post in-person shifts with an hourly rate in rand (minimum wage enforced) and book applicants.
 - Pay is held by TradeSafe escrow and released to the worker's bank after the shift; cash shifts are recorded too.
-- CEO/admin dashboard with authenticator codes: traffic, apply and sponsored clicks, users, payments, team and an activity log.
+- CEO/admin dashboard (optional two-step sign-in): traffic, apply and sponsored clicks, users, payments, team and an activity log.
 - Own click tracking plus Google Analytics (after consent). All job pay is shown in rand.
 - Setup steps: **[BACKEND.md](BACKEND.md)**.
 
