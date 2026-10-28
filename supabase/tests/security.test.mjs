@@ -11,6 +11,7 @@ create schema auth; create schema storage;
 create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz, raw_user_meta_data jsonb default '{}', created_at timestamptz default now(), last_sign_in_at timestamptz);
 create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
 create function auth.uid() returns uuid language sql stable as $$ select nullif(auth.jwt() ->> 'sub', '')::uuid $$;
+create table auth.mfa_factors (id uuid primary key default gen_random_uuid(), user_id uuid, status text);
 create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
 create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text, owner uuid);
 alter table storage.objects enable row level security;
@@ -45,6 +46,8 @@ await signup('biz', 'shop@example.com', {account_type: 'business', business_name
 await signup('w1', 'thabo@example.com', {account_type: 'worker', full_name: 'Thabo'});
 await signup('w2', 'lerato@example.com', {full_name: 'Lerato'});
 await signup('d', 'someone@example.com', {});
+// The CEO and admin have switched on two-step sign-in (authenticator app).
+await db.query(`insert into auth.mfa_factors (user_id, status) values ($1, 'verified'), ($2, 'verified')`, [ids.ceo, ids.admin]);
 await ok('profiles created for every sign-up', async () => (await db.query('select count(*)::int n from profiles')).rows[0].n === 6 || Promise.reject(new Error('count')));
 await ok('CEO not staff before email confirmed', async () => (await db.query('select count(*)::int n from staff')).rows[0].n === 0 || Promise.reject(new Error('early')));
 await db.query(`update auth.users set email_confirmed_at = now() where id = $1`, [ids.ceo]);
@@ -191,5 +194,34 @@ await ok('people booked together see the phone number', async () => { await db.q
 await ok('suspended profiles are hidden from others', async () => { const c = (await as('w1', 'aal1', `select profile_card('${ids.w2}') c`)).rows[0].c; if (c) throw new Error('shown'); return 'hidden'; });
 await ok('shift board shows the business photo and theme', async () => Object.keys((await as('anon', null, `select * from open_shifts(null, null, 2000)`)).rows[0] || {}).filter(k => k.startsWith('business')).join());
 await ok('my dashboard summary', async () => JSON.stringify((await as('w1', 'aal1', `select my_summary() s`)).rows[0].s.business));
+
+// two-step sign-in is a choice
+await ok('admin without an authenticator switched on gets in with password only', async () => { await db.query(`delete from auth.mfa_factors where user_id = $1`, [ids.admin]); return !!(await as('admin', 'aal1', `select admin_stats(7) s`)).rows[0].s; });
+await denied('CEO with an authenticator switched on still needs the code', () => as('ceo', 'aal1', `select admin_stats(7)`));
+await denied("CEO can't require two-step for everyone without their own authenticator", async () => { await db.query(`delete from auth.mfa_factors where user_id = $1`, [ids.ceo]); try { return await as('ceo', 'aal1', `select admin_set_settings(null, null, null, null, true)`); } finally { await db.query(`insert into auth.mfa_factors (user_id, status) values ($1, 'verified')`, [ids.ceo]); } });
+await ok('CEO requires two-step for the whole team', async () => { await as('ceo', 'aal2', `select admin_set_settings(null, null, null, null, true)`); return (await db.query(`select require_staff_mfa from app_settings`)).rows[0].require_staff_mfa; });
+await denied('then an admin without the code is refused', () => as('admin', 'aal1', `select admin_stats(7)`));
+await denied('visitors cannot call the two-step check', () => as('anon', null, `select staff_needs_mfa('${ids.admin}')`));
+
+// deleting jobs and clean-up
+let tidy;
+await ok('business deletes a shift whose worker cancelled', async () => { tidy = (await as('biz', 'aal1', shiftFor('biz', 40))).rows[0].id; await as('biz', 'aal1', `update profiles set can_hire = true where id = '${ids.biz}'`); const app = (await as('w1', 'aal1', `insert into applications (shift_id, worker_id) values ('${tidy}', '${ids.w1}') returning id`)).rows[0].id; await as('w1', 'aal1', `update applications set status = 'withdrawn' where id = '${app}'`); const r = await as('biz', 'aal1', `delete from shifts where id = '${tidy}'`); return r.affectedRows + ' deleted, bookings: ' + (await db.query(`select count(*)::int n from applications where shift_id = $1`, [tidy])).rows[0].n; });
+await ok('the strike survives the deleted shift', async () => (await db.query(`select count(*)::int n from strikes where worker_id = $1 and application_id is null`, [ids.w1])).rows[0].n);
+await ok("a shift with a booked worker can't be deleted", async () => { const r = await as('w1', 'aal1', `delete from shifts where id = '${dualShift}'`); if (r.affectedRows) throw new Error('deleted'); return 'kept'; });
+await denied('visitors cannot run the clean-up', () => as('anon', null, `select cleanup_old_data()`));
+await denied('admins cannot run the clean-up', () => as('admin', 'aal2', `select admin_cleanup()`));
+await ok('clean-up removes old empty shifts, old tracking, keeps worked shifts', async () => {
+  const old = new Date(Date.now() - 20 * 864e5), oldEnd = new Date(old.getTime() + 4 * 36e5);
+  await db.exec(`select set_config('request.jwt.claims', '', false)`);
+  const fut = new Date(Date.now() + 864e5);
+  const sid = (await db.query(`insert into shifts (business_id, title, description, category, city, province, lat, lon, starts_at, ends_at, hourly_rate_zar) values ($1, 'Old empty', 'Nobody booked this shift at all', 'Retail', 'Rosebank', 'Gauteng', -26.1, 28.0, $2, $3, 45) returning id`, [ids.biz, fut, new Date(fut.getTime() + 4 * 36e5)])).rows[0].id;
+  await db.query(`update shifts set starts_at = $2, ends_at = $3 where id = $1`, [sid, old, oldEnd]);
+  await db.query(`insert into events (at, visitor_id, type) values (now() - interval '14 months', 'old-visitor-1', 'page_view')`);
+  const kept = (await db.query(`select count(*)::int n from shifts where id = $1`, [shiftId])).rows[0].n;
+  const r = (await as('ceo', 'aal2', `select admin_cleanup() r`)).rows[0].r;
+  const after = (await db.query(`select count(*)::int n from shifts where title = 'Old empty'`)).rows[0].n + (await db.query(`select count(*)::int n from events where visitor_id = 'old-visitor-1'`)).rows[0].n;
+  if (after) throw new Error('not removed'); if (!(await db.query(`select count(*)::int n from shifts where id = $1`, [shiftId])).rows[0].n === kept) throw new Error('worked shift removed');
+  return JSON.stringify(r);
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);

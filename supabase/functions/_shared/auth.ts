@@ -21,7 +21,7 @@ export function admin(): SupabaseClient {
   return createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {auth: {persistSession: false}});
 }
 
-export type Caller = {id: string; email: string; aal: string; staff: 'ceo' | 'admin' | null};
+export type Caller = {id: string; email: string; aal: string; staff: 'ceo' | 'admin' | null; staffOk: boolean};
 
 // Verifies the signed-in user's token with Supabase Auth, then reads their staff role.
 export async function caller(req: Request): Promise<Caller> {
@@ -33,10 +33,18 @@ export async function caller(req: Request): Promise<Caller> {
   let aal = 'aal1';
   try { aal = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).aal ?? 'aal1'; } catch { /* token already verified above */ }
   const {data: s} = await db.from('staff').select('role').eq('user_id', data.user.id).maybeSingle();
-  return {id: data.user.id, email: data.user.email ?? '', aal, staff: (s?.role as Caller['staff']) ?? null};
+  const staff = (s?.role as Caller['staff']) ?? null;
+  // Two-step sign-in is optional, unless the CEO requires it for the team or this person switched it on:
+  // then staff powers need a session verified with the authenticator code (aal2).
+  let staffOk = false;
+  if (staff) {
+    if (aal === 'aal2') staffOk = true;
+    else { const {data: needs} = await db.rpc('staff_needs_mfa', {p_user: data.user.id}); staffOk = needs === false; }
+  }
+  return {id: data.user.id, email: data.user.email ?? '', aal, staff, staffOk};
 }
 
-export const isStaffWithMfa = (c: Caller) => !!c.staff && c.aal === 'aal2';
+export const isStaffWithMfa = (c: Caller) => c.staffOk;
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
