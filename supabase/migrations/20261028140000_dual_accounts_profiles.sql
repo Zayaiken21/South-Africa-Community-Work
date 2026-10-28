@@ -1,6 +1,6 @@
 -- Upgrade 2: one account can both work and hire (switch between "Working" and "Hiring"), detailed profiles
 -- with a profile photo and colour theme, and a public profile card.
--- Run once in Supabase → SQL Editor, AFTER 20261028120000_shift_pickup_strikes.sql. Keeps all existing data.
+-- Safe to run again. Run in Supabase → SQL Editor, AFTER 20261028120000_shift_pickup_strikes.sql. Keeps all existing data.
 
 -- ---------------------------------------------------------------- modes and profile details
 alter table public.profiles
@@ -23,8 +23,10 @@ alter table public.profiles
   add column if not exists website text check (website ~ '^https?://[^\s]+$' and char_length(website) <= 200);
 
 -- Existing accounts keep what they signed up as.
-update public.profiles set can_hire = (account_type = 'business'), can_work = (account_type = 'worker'), active_mode = account_type;
+update public.profiles set can_hire = true, can_work = false, active_mode = 'business'
+ where account_type = 'business' and active_mode = 'worker' and not can_hire;
 
+alter table public.profiles drop constraint if exists profiles_has_a_mode, drop constraint if exists profiles_mode_enabled;
 alter table public.profiles
   add constraint profiles_has_a_mode check (can_work or can_hire),
   add constraint profiles_mode_enabled check ((active_mode = 'worker' and can_work) or (active_mode = 'business' and can_hire));
@@ -61,7 +63,6 @@ begin
      or new.suspended_at is distinct from old.suspended_at or new.created_at is distinct from old.created_at then
     raise exception 'These account details can only be changed by Community Work.';
   end if;
-  -- Profile photos must be the user's own upload in our storage, not a link to somewhere else.
   if new.avatar_url is distinct from old.avatar_url and new.avatar_url is not null
      and not (new.avatar_url ~ '^https://[a-z0-9]+\.supabase\.co/storage/v1/object/public/avatars/'
               and position('/avatars/' || new.id::text || '/' in new.avatar_url) > 0) then
@@ -93,12 +94,16 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('avatars', 'avatars', true, 2097152, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do nothing;
 
+drop policy if exists "own avatar upload" on storage.objects;
 create policy "own avatar upload" on storage.objects for insert to authenticated
   with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "own avatar replace" on storage.objects;
 create policy "own avatar replace" on storage.objects for update to authenticated
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "own avatar delete" on storage.objects;
 create policy "own avatar delete" on storage.objects for delete to authenticated
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "own avatar list" on storage.objects;
 create policy "own avatar list" on storage.objects for select to authenticated
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
 
@@ -132,7 +137,7 @@ $$;
 revoke execute on function public.profile_card(uuid) from public, anon;
 grant execute on function public.profile_card(uuid) to authenticated;
 
--- ---------------------------------------------------------------- shift board with the business's photo and theme
+-- ---------------------------------------------------------------- shift board with the businesss photo and theme
 drop function if exists public.open_shifts(double precision, double precision, int, int);
 create or replace function public.open_shifts(p_lat double precision default null, p_lon double precision default null,
                                               p_radius_km int default 200, p_limit int default 200)

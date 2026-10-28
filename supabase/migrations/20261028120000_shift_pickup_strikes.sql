@@ -1,5 +1,5 @@
 -- Upgrade 1: workers pick up shifts themselves, strikes for cancellations and no-shows, suspension and appeals.
--- Run once in Supabase → SQL Editor, after 20261028000000_marketplace.sql. Safe to run on a live database.
+-- Safe to run again. Run in Supabase → SQL Editor, after 20261028000000_marketplace.sql. Safe to run on a live database.
 
 alter table public.app_settings
   add column if not exists strike_limit int not null default 3 check (strike_limit between 1 and 10),
@@ -17,17 +17,17 @@ returns json language sql stable security definer set search_path = public as $$
 $$;
 
 -- True only for the server: the service-role key, or a direct database session with no signed-in user
--- (migrations, the SQL editor). Checks the caller's token, not current_user, which inside a
+-- (migrations, the SQL editor). Checks the callers token, not current_user, which inside a
 -- security-definer function is always the function owner.
 create or replace function public.is_service()
 returns boolean language sql stable as $$
   select coalesce(auth.jwt() ->> 'role', '') = 'service_role'
-      or coalesce(current_setting('cw.system', true), '') = 'on'   -- set only inside our own triggers, for one statement
+      or coalesce(current_setting('cw.system', true), '') = 'on'
       or (coalesce(auth.jwt() ->> 'sub', '') = '' and coalesce(auth.jwt() ->> 'role', '') not in ('anon', 'authenticated')
           and session_user in ('postgres', 'supabase_admin'));
 $$;
 
--- Users can't grant themselves verified/payout/suspension flags or change account type after hiring starts.
+-- Users cant grant themselves verified/payout/suspension flags or change account type after hiring starts.
 create or replace function public.profiles_guard() returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if public.is_service() or public.is_staff() then new.updated_at := now(); return new; end if;
@@ -46,7 +46,7 @@ begin
 end $$;
 
 -- Workers pick up shifts themselves: a new booking is confirmed straight away if a spot is free.
--- The shift row is locked first, so two workers can't take the last spot at the same moment.
+-- The shift row is locked first, so two workers cant take the last spot at the same moment.
 create or replace function public.applications_pickup() returns trigger language plpgsql security definer set search_path = public as $$
 declare s shifts; booked int;
 begin
@@ -63,6 +63,7 @@ begin
   new.created_at := now(); new.updated_at := now();
   return new;
 end $$;
+drop trigger if exists applications_pickup on public.applications;
 drop trigger if exists applications_pickup on public.applications;
 create trigger applications_pickup before insert on public.applications for each row execute function public.applications_pickup();
 
@@ -103,7 +104,7 @@ begin
   return new;
 end $$;
 
--- Strikes: a worker who cancels a shift they picked up, or doesn't show up, gets a strike.
+-- Strikes: a worker who cancels a shift they picked up, or doesnt show up, gets a strike.
 -- At the strike limit (3 by default) the account is suspended until staff approve an appeal; the count then
 -- starts again, so every further 3 strikes means another suspension. Cancelling within a few minutes of
 -- picking up (a mis-tap) is free.
@@ -117,7 +118,9 @@ create table if not exists public.strikes (
 create index if not exists strikes_worker_idx on public.strikes (worker_id, at desc);
 alter table public.strikes enable row level security;
 drop policy if exists "worker sees own strikes" on public.strikes;
+drop policy if exists "worker sees own strikes" on public.strikes;
 create policy "worker sees own strikes" on public.strikes for select using (worker_id = auth.uid());
+drop policy if exists "staff see strikes" on public.strikes;
 drop policy if exists "staff see strikes" on public.strikes;
 create policy "staff see strikes" on public.strikes for select using (public.is_staff());
 
@@ -140,6 +143,7 @@ begin
   return new;
 end $$;
 drop trigger if exists applications_strike on public.applications;
+drop trigger if exists applications_strike on public.applications;
 create trigger applications_strike after update of status on public.applications for each row execute function public.applications_strike();
 
 -- Appeals: a suspended user explains what happened; staff approve (account restored) or deny.
@@ -156,7 +160,9 @@ create table if not exists public.appeals (
 create unique index if not exists appeals_one_pending on public.appeals (user_id) where status = 'pending';
 alter table public.appeals enable row level security;
 drop policy if exists "own appeals" on public.appeals;
+drop policy if exists "own appeals" on public.appeals;
 create policy "own appeals" on public.appeals for select using (user_id = auth.uid());
+drop policy if exists "staff see appeals" on public.appeals;
 drop policy if exists "staff see appeals" on public.appeals;
 create policy "staff see appeals" on public.appeals for select using (public.is_staff());
 create or replace function public.can_appeal() returns boolean language sql stable security definer set search_path = public as $$
@@ -164,10 +170,12 @@ create or replace function public.can_appeal() returns boolean language sql stab
      and not exists (select 1 from appeals where user_id = auth.uid() and status = 'pending');
 $$;
 drop policy if exists "suspended users appeal" on public.appeals;
+drop policy if exists "suspended users appeal" on public.appeals;
 create policy "suspended users appeal" on public.appeals for insert
   with check (user_id = auth.uid() and status = 'pending' and response is null and reviewed_by is null and public.can_appeal());
 
 drop policy if exists "worker applies" on public.applications;
+drop policy if exists "worker picks up shifts" on public.applications;
 drop policy if exists "worker picks up shifts" on public.applications;
 create policy "worker picks up shifts" on public.applications for insert with check (worker_id = auth.uid() and public.can_apply(shift_id));
 
