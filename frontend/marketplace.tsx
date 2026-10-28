@@ -615,7 +615,7 @@ function WorkerBookings({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
 }
 
 function StatusPill({status}: {status: string}) {
-  const label: Record<string, string> = {applied: 'Applied', accepted: 'Booked', declined: 'Not selected', withdrawn: 'Withdrawn', completed: 'Completed', no_show: 'No-show',
+  const label: Record<string, string> = {applied: 'Applied', accepted: 'Booked', declined: 'Released', withdrawn: 'Withdrawn', completed: 'Completed', no_show: 'No-show',
     open: 'Open', filled: 'Fully booked', in_progress: 'In progress', cancelled: 'Cancelled'};
   return <span className={'pill ' + status}>{label[status] ?? status}</span>;
 }
