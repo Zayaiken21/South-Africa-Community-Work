@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Community Work South Africa",
   "short_name": "Community Work",
-  "description": "Find local shifts, in-person jobs across South Africa and online work. Post jobs for your community.",
+  "description": "Find local shifts, in-person jobs across South Africa and online work. Hire workers by the shift.",
   "start_url": "./index.html?source=app",
   "scope": "./",
   "display": "standalone",
@@ -58,8 +58,8 @@
       ]
     },
     {
-      "name": "Post a job",
-      "url": "./post-job.html",
+      "name": "Paid shifts",
+      "url": "./shifts.html",
       "icons": [
         {
           "src": "assets/icons/icon-192.png",

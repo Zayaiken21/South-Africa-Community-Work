@@ -1,3 +1,4 @@
+import {track} from './analytics';
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {ArrowUpRight, X} from 'lucide-react';
 
@@ -101,30 +102,34 @@ function pickOffer(offers: Offer[], spot: Spot, ctx: {category?: string; mode?: 
   return o;
 }
 
-function useImpression(ref: React.RefObject<HTMLElement | null>, url?: string) {
+// Counts a view once half the card is on screen: in your own dashboard, and with the partner's pixel if they gave one.
+function useImpression(ref: React.RefObject<HTMLElement | null>, url?: string, offerId?: string, kind: 'sponsored_view' | 'ad_view' = 'sponsored_view') {
   useEffect(() => {
     const el = ref.current;
-    if (!el || !url || preview) return;
+    if (!el || preview || (!url && !offerId)) return;
     const io = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting) { const img = new Image(); img.referrerPolicy = 'no-referrer-when-downgrade'; img.src = url; io.disconnect(); }
+      if (!e.isIntersecting) return;
+      io.disconnect();
+      if (offerId) track(kind, offerId);
+      if (url) { const img = new Image(); img.referrerPolicy = 'no-referrer-when-downgrade'; img.src = url; }
     }, {threshold: 0.5});
     io.observe(el);
     return () => io.disconnect();
-  }, [ref, url]);
+  }, [ref, url, offerId]);
 }
 
 function initials(name: string) { return name.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'AD'; }
 
 function OfferCard({offer, spot}: {offer: Offer; spot: Spot}) {
   const ref = useRef<HTMLElement>(null);
-  useImpression(ref, offer.impressionUrl);
+  useImpression(ref, offer.impressionUrl, offer.id);
   return (
     <aside ref={ref} className={'sponsored sp-' + spot} aria-label={'Sponsored: ' + offer.partner}>
       <div className="sp-top">
         <span className="sp-label">Sponsored{offer.sample ? ' · sample' : ''}</span>
         <span className="sp-partner">{offer.partner}</span>
       </div>
-      <a className="sp-body" href={offer.url} target="_blank" rel="sponsored noopener">
+      <a className="sp-body" href={offer.url} target="_blank" rel="sponsored noopener" data-offer={offer.id} data-partner={offer.partner}>
         {offer.logo ? <img className="sp-logo" src={offer.logo} alt="" loading="lazy" width={48} height={48}/> : <span className="sp-logo">{initials(offer.partner)}</span>}
         <span className="sp-text">
           <strong>{offer.title}</strong>
@@ -140,6 +145,8 @@ function OfferCard({offer, spot}: {offer: Offer; spot: Spot}) {
 
 function AdSenseUnit({config, spot}: {config: AdConfig; spot: 'feed' | 'article' | 'sidebar'}) {
   const ref = useRef<HTMLModElement>(null);
+  const box = useRef<HTMLElement>(null);
+  useImpression(box, undefined, 'adsense-' + spot, 'ad_view');
   useEffect(() => {
     if (!ref.current || ref.current.dataset.adsbygoogleStatus) return;
     try { ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({}); } catch { /* blocked */ }
@@ -149,7 +156,7 @@ function AdSenseUnit({config, spot}: {config: AdConfig; spot: 'feed' | 'article'
     : spot === 'article' ? {'data-ad-format': 'fluid', 'data-ad-layout': 'in-article'}
     : {'data-ad-format': 'auto', 'data-full-width-responsive': 'true'};
   return (
-    <aside className={'ad ad-' + spot} aria-label="Advertisement">
+    <aside ref={box} className={'ad ad-' + spot} aria-label="Advertisement">
       <span className="sp-label">Advertisement</span>
       <ins ref={ref} className="adsbygoogle" style={{display: 'block'}} data-ad-client={config.client} data-ad-slot={config.slots[spot]} {...format}/>
     </aside>
@@ -186,12 +193,12 @@ export function HangingOffer() {
     return () => window.removeEventListener('scroll', onScroll);
   }, [money]);
   const ref = useRef<HTMLDivElement>(null);
-  useImpression(ref, offer?.impressionUrl);
+  useImpression(ref, offer?.impressionUrl, offer?.id);
   if (!offer) return null;
   const close = () => { setOffer(null); try { localStorage.setItem('cw-hang-closed', String(Date.now())); } catch { /* ignore */ } };
   return (
     <div ref={ref} className="hanging" role="complementary" aria-label={'Sponsored: ' + offer.partner}>
-      <a href={offer.url} target="_blank" rel="sponsored noopener">
+      <a href={offer.url} target="_blank" rel="sponsored noopener" data-offer={offer.id} data-partner={offer.partner}>
         <span className="hang-text"><small><b>Sponsored</b> · {offer.partner}</small><strong>{offer.title}</strong></span>
         <span className="hang-cta">{offer.cta || 'Open'}</span>
       </a>

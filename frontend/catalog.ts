@@ -24,7 +24,7 @@ export type CommunityJob = {
 export type FeedJob = {
   id: string; source: string; sourceUrl: string; url: string; title: string; company: string;
   mode: 'onsite' | 'remote'; location: string; province?: string; lat?: number; lon?: number;
-  category: string; type?: string; salary?: string; hourlyZar?: number; posted: string; excerpt: string;
+  category: string; type?: string; salary?: string; salaryOriginal?: string; hourlyZar?: number; posted: string; excerpt: string;
 };
 
 export type Feed = {updated: string | null; sources: {name: string; url: string; count: number}[]; jobs: FeedJob[]};
