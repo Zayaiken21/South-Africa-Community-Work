@@ -30,6 +30,7 @@ export type Profile = {
   drivers_licence?: string | null; education?: string | null; experience?: Experience[]; business_type?: string | null;
   business_hours?: string | null; website?: string | null; created_at?: string;
   strikes?: number; suspended_reason?: string | null;
+  business_bio?: string | null; business_avatar_url?: string | null; banned?: boolean;
 };
 export type Experience = {role: string; place: string; years?: string; note?: string};
 

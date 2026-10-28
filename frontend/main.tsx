@@ -76,7 +76,7 @@ function App() {
           {install && <button className="btn btn-outline btn-sm hide-sm" onClick={install}><Download size={16}/>Install app</button>}
           {signedIn
             ? <a className="account-chip hide-sm" href="account.html" title="My account">
-                <Avatar url={acct.profile?.avatar_url} name={acct.profile?.full_name || acct.profile?.business_name} size={34} themeId={acct.profile?.theme}/>
+                {(() => { const biz = acct.profile && modes(acct.profile).active === 'business'; return <Avatar url={biz ? acct.profile?.business_avatar_url : acct.profile?.avatar_url} name={biz ? acct.profile?.business_name : acct.profile?.full_name} size={34} themeId={acct.profile?.theme}/>; })()}
                 <span>{acct.profile && modes(acct.profile).active === 'business' ? 'Hiring' : 'Working'}</span>
               </a>
             : <><a className="btn btn-outline btn-sm hide-sm" href="account.html">Sign in</a><a className="btn btn-primary btn-sm hide-sm" href="account.html?signup=1&type=business"><Building2 size={16}/>Hire workers</a></>}
