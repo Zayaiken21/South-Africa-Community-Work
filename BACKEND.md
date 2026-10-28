@@ -20,6 +20,7 @@ Do these steps once, in order. Nothing here needs a terminal except step 5.
 | `supabase/migrations/20261028200000_rebook_blocks_business_profiles.sql` | Re-booking after cancellations, business blocks, permanent bans, business-only profiles |
 | `supabase/migrations/20261028220000_hide_released_shifts.sql` | Released workers no longer see that shift; blocked workers see none of that business’s shifts |
 | `supabase/migrations/20261028240000_count_people_not_bookings.sql` | Worker counts count people, not bookings |
+| `supabase/migrations/20261028260000_hide_own_shifts.sql` | You never see your own business's shifts on the shift board |
 
 They keep all existing data. `supabase/repair-accounts.sql` fixes logins created before the database was set up.
 
