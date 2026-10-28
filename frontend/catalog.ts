@@ -78,6 +78,16 @@ export const cities: Location[] = [
   {label: 'George, Western Cape', lat: -33.9630, lon: 22.4617},
 ].map(c => ({...c, source: 'city' as const}));
 
+// Distances are stored and searched in kilometres; people see miles.
+export const KM_PER_MILE = 1.609344;
+export const milesToKm = (mi: number) => Math.round(mi * KM_PER_MILE);
+export function milesLabel(km: number) {
+  const mi = km / KM_PER_MILE;
+  if (mi < 0.5) return 'Under ½ mile';
+  const n = mi < 10 ? Number(mi.toFixed(1)) : Math.round(mi);
+  return `${n.toLocaleString('en-ZA')} ${n === 1 ? 'mile' : 'miles'}`;
+}
+
 export const money = (v: number) =>
   new Intl.NumberFormat('en-ZA', {style: 'currency', currency: 'ZAR', maximumFractionDigits: 0}).format(v);
 

@@ -10,7 +10,7 @@ import {Avatar, ProfileEditor} from './profile';
 import {themeStyle} from './themes';
 import {track} from './analytics';
 import {LocationPicker, Sheet, useAreaLocation} from './JobsView';
-import {browseCategories, money, type Location} from './catalog';
+import {browseCategories, money, milesLabel, milesToKm, type Location} from './catalog';
 
 const PROVINCES = ['Eastern Cape', 'Free State', 'Gauteng', 'KwaZulu-Natal', 'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape', 'Western Cape'];
 const params = new URLSearchParams(location.search);
@@ -793,14 +793,14 @@ type OpenShift = {id: string; title: string; description: string; category: stri
 export function ShiftsPage() {
   const acct = useAccount();
   const {location: area, choose} = useAreaLocation();
-  const [radius, setRadius] = useState(50);
+  const [radius, setRadius] = useState(30); // miles
   const [rows, setRows] = useState<OpenShift[] | null>(null), [err, setErr] = useState('');
   const [mine, setMine] = useState<Set<string>>(new Set());
   const [picking, setPicking] = useState<OpenShift | null>(null), [pickArea, setPickArea] = useState(false);
   const [busy, setBusy] = useState(false), [pickErr, setPickErr] = useState(''), [booked, setBooked] = useState<OpenShift | null>(null);
   const load = () => {
     if (!acct.ready || !acct.sb) return;
-    acct.sb.rpc('open_shifts', {p_lat: area?.lat ?? null, p_lon: area?.lon ?? null, p_radius_km: area ? radius : 2000, p_limit: 200})
+    acct.sb.rpc('open_shifts', {p_lat: area?.lat ?? null, p_lon: area?.lon ?? null, p_radius_km: area ? milesToKm(radius) : 2000, p_limit: 200})
       .then(({data, error}) => { if (error) setErr(error.message); else setRows(data as OpenShift[]); });
     if (acct.session) acct.sb.from('applications').select('shift_id').eq('worker_id', acct.session.user.id).then(({data}) => setMine(new Set((data || []).map(d => d.shift_id))));
   };
@@ -836,7 +836,7 @@ export function ShiftsPage() {
       </div>
       <div className="tools-top shifts-tools">
         <button className="location-chip" onClick={() => setPickArea(true)}><MapPin size={16}/><span>{area ? area.label : 'Set your area'}</span></button>
-        <div className="chip-wrap">{[10, 25, 50, 100].map(r => <button key={r} className={radius === r ? 'on' : ''} onClick={() => setRadius(r)}>{r} km</button>)}</div>
+        <div className="chip-wrap">{[5, 15, 30, 60].map(r => <button key={r} className={radius === r ? 'on' : ''} onClick={() => setRadius(r)}>{r} miles</button>)}</div>
       </div>
       {!acct.session && <Notice>Create a free account to pick up shifts. <a className="link" href="account.html?signup=1&type=worker">Sign up</a> · <a className="link" href="account.html">Sign in</a></Notice>}
       {blocked}
@@ -856,7 +856,7 @@ export function ShiftsPage() {
                 </div>
                 <div className="tags"><span className="tag onsite"><MapPin size={13}/>In person</span><span className="tag">{s.category}</span><span className={'tag ' + (s.payment_method === 'escrow' ? 'local' : '')}>{s.payment_method === 'escrow' ? <><ShieldCheck size={13}/>Pay secured</> : <><Banknote size={13}/>Cash</>}</span></div>
                 <p className="excerpt">{s.description}</p>
-                <div className="meta"><span><CalendarDays size={14}/>{day(s.starts_at)} · {time(s.starts_at)}–{time(s.ends_at)}</span><span><MapPin size={14}/>{s.city}{s.distance_km != null ? ` · ${s.distance_km.toFixed(s.distance_km < 10 ? 1 : 0)} km` : ''}</span></div>
+                <div className="meta"><span><CalendarDays size={14}/>{day(s.starts_at)} · {time(s.starts_at)}–{time(s.ends_at)}</span><span><MapPin size={14}/>{s.city}{s.distance_km != null ? ` · ${milesLabel(s.distance_km)} away` : ''}</span></div>
                 <div className="card-foot">
                   <div className="pay"><strong>{money(s.hourly_rate_zar)} / hr</strong><small>{money(s.hourly_rate_zar * h)} for {h} h</small></div>
                   {have ? <span className="pill accepted"><Check size={13}/>You’re booked</span>
