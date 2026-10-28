@@ -1,9 +1,9 @@
 -- Upgrade 3: two-step sign-in (authenticator app) becomes a choice, and old or deleted jobs are cleaned up.
--- Run once in Supabase → SQL Editor, AFTER 20261028140000_dual_accounts_profiles.sql. Keeps all live data.
+-- Safe to run again. Run in Supabase → SQL Editor, AFTER 20261028140000_dual_accounts_profiles.sql. Keeps all live data.
 
 -- ---------------------------------------------------------------- optional two-step sign-in for staff
 -- Off by default. A staff member who switches on an authenticator always needs its code (a stolen password alone
--- still can't get in). The CEO can also require it for the whole team.
+-- still cant get in). The CEO can also require it for the whole team.
 alter table public.app_settings add column if not exists require_staff_mfa boolean not null default false;
 
 create or replace function public.staff_needs_mfa(p_user uuid) returns boolean
@@ -59,10 +59,11 @@ create or replace function public.shift_deletable(p_shift uuid) returns boolean 
      and not exists (select 1 from applications where shift_id = p_shift and status in ('accepted', 'completed', 'no_show'));
 $$;
 drop policy if exists "business deletes unbooked shifts" on public.shifts;
+drop policy if exists "business deletes unworked shifts" on public.shifts;
 create policy "business deletes unworked shifts" on public.shifts for delete
   using (business_id = auth.uid() and public.shift_deletable(id));
 
--- Strikes keep their record when the shift is deleted (application_id becomes empty), so deleting can't wipe a strike.
+-- Strikes keep their record when the shift is deleted (application_id becomes empty), so deleting cant wipe a strike.
 
 -- ---------------------------------------------------------------- automatic clean-up (saves database space)
 -- Runs every night at 03:17 SAST. Removes only data nobody needs:
@@ -105,13 +106,13 @@ end $$;
 revoke execute on function public.admin_cleanup() from public, anon;
 grant execute on function public.admin_cleanup() to authenticated;
 
--- Nightly schedule with pg_cron (built into Supabase). If pg_cron isn't switched on, this step is skipped:
--- turn it on under Database → Extensions → pg_cron, then run this file's last block again.
+-- Nightly schedule with pg_cron (built into Supabase). If pg_cron isnt switched on, this step is skipped:
+-- turn it on under Database → Extensions → pg_cron, then run this files last block again.
 do $$
 begin
   create extension if not exists pg_cron;
   perform cron.unschedule(jobid) from cron.job where jobname = 'community-work-cleanup';
-  perform cron.schedule('community-work-cleanup', '17 1 * * *', 'select public.cleanup_old_data()');  -- 01:17 UTC = 03:17 SAST
+  perform cron.schedule('community-work-cleanup', '17 1 * * *', 'select public.cleanup_old_data()');
 exception when others then
   raise notice 'Nightly clean-up not scheduled (%). Turn on pg_cron in Database → Extensions and run this block again.', sqlerrm;
 end $$;
