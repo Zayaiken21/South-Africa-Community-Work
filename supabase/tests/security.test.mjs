@@ -88,13 +88,15 @@ await denied('worker cannot record hours', () => as('w1', 'aal1', `update applic
 await denied('worker cannot mark itself completed', () => as('w1', 'aal1', `update applications set status = 'completed' where id = '${a1}'`));
 await denied('pay locked once booked', () => as('biz', 'aal1', `update shifts set hourly_rate_zar = 35 where id = '${shiftId}'`));
 await ok('worker 1 still sees the filled shift', async () => (await as('w1', 'aal1', `select status from shifts where id = '${shiftId}'`)).rows[0]?.status || Promise.reject(new Error('hidden')));
-await ok('worker 1 sees the business profile (contact)', async () => (await as('w1', 'aal1', `select business_name from profiles where id = '${ids.biz}'`)).rows[0]?.business_name || Promise.reject(new Error('hidden')));
+await ok('worker 1 sees the business card with contact', async () => { const c = (await as('w1', 'aal1', `select profile_card('${ids.biz}', 'business') c`)).rows[0].c; if (!c?.business_name || c.full_name || c.skills) throw new Error(JSON.stringify(c)); return c.business_name; });
+await ok("worker can't read the business owner's private profile row", async () => { const r = await as('w1', 'aal1', `select * from profiles where id = '${ids.biz}'`); if (r.rows.length) throw new Error('leak'); return 'hidden'; });
 let overlapId;
 await ok('business posts a second shift at the same time', async () => { overlapId = (await as('biz', 'aal1', shiftSql(50))).rows[0].id; return 'ok'; });
 await denied('worker 1 cannot double-book the same hours', () => as('w1', 'aal1', `insert into applications (shift_id, worker_id) values ('${overlapId}', '${ids.w1}')`));
 await ok('worker 2 picks up the second shift', async () => { a2 = (await as('w2', 'aal1', `insert into applications (shift_id, worker_id) values ('${overlapId}', '${ids.w2}') returning id`)).rows[0].id; return a2; });
 await ok('cancelling within the grace period is free', async () => { await as('w2', 'aal1', `update applications set status = 'withdrawn' where id = '${a2}'`); return (await db.query(`select strikes from profiles where id=$1`, [ids.w2])).rows[0].strikes; });
-await denied('worker cannot re-take a shift they cancelled', () => as('w2', 'aal1', `insert into applications (shift_id, worker_id) values ('${overlapId}', '${ids.w2}')`));
+await ok('a cancelled shift can be booked again', async () => { const id = (await as('w2', 'aal1', `insert into applications (shift_id, worker_id) values ('${overlapId}', '${ids.w2}') returning id`)).rows[0].id; await as('w2', 'aal1', `update applications set status = 'withdrawn' where id = '${id}'`); return 'rebooked and cancelled again'; });
+await ok('the shift is open again after the cancellation', async () => (await db.query(`select status from shifts where id = $1`, [overlapId])).rows[0].status);
 
 // profile protections
 await denied('worker cannot mark itself verified', () => as('w1', 'aal1', `update profiles set verified = true where id = '${ids.w1}'`));
@@ -223,5 +225,24 @@ await ok('clean-up removes old empty shifts, old tracking, keeps worked shifts',
   if (after) throw new Error('not removed'); if (!(await db.query(`select count(*)::int n from shifts where id = $1`, [shiftId])).rows[0].n === kept) throw new Error('worked shift removed');
   return JSON.stringify(r);
 });
+
+// blocking, releasing and bans
+let blk;
+await ok('business blocks a worker', async () => { await as('biz', 'aal1', `insert into business_blocks (business_id, worker_id, reason) values ('${ids.biz}', '${ids.w1}', 'Late twice')`); return (await as('biz', 'aal1', `select count(*)::int n from my_blocked_workers()`)).rows[0].n; });
+await ok("blocked worker doesn't see that business's shifts", async () => { blk = (await as('biz', 'aal1', shiftFor('biz', 50))).rows[0].id; const r = await as('w1', 'aal1', `select id from open_shifts(null, null, 2000) where id = '${blk}'`); if (r.rows.length) throw new Error('visible'); const other = await as('d', 'aal1', `select id from open_shifts(null, null, 2000) where id = '${blk}'`); return other.rows.length ? 'hidden for blocked, shown to others' : 'not shown to others either'; });
+await denied('blocked worker cannot pick up that business’s shift', () => as('w1', 'aal1', `insert into applications (shift_id, worker_id) values ('${blk}', '${ids.w1}')`));
+await denied('worker cannot see who blocked them', async () => { const r = await as('w1', 'aal1', `select * from business_blocks`); return r.rows.length ? r : {rows: [], affectedRows: 0}; });
+await denied('a business cannot block for another business', () => as('w2', 'aal1', `insert into business_blocks (business_id, worker_id) values ('${ids.biz}', '${ids.d}')`));
+await ok('business unblocks the worker', async () => { await as('biz', 'aal1', `delete from business_blocks where worker_id = '${ids.w1}'`); return (await as('w1', 'aal1', `select count(*)::int n from open_shifts(null, null, 2000) where id = '${blk}'`)).rows[0].n; });
+await ok('released worker drops off and the spot reopens', async () => { const app = (await as('w1', 'aal1', `insert into applications (shift_id, worker_id) values ('${blk}', '${ids.w1}') returning id`)).rows[0].id; await as('biz', 'aal1', `update applications set status = 'declined' where id = '${app}'`); return (await db.query(`select status from shifts where id = $1`, [blk])).rows[0].status; });
+await denied("released worker can't re-book the same shift", () => as('w1', 'aal1', `insert into applications (shift_id, worker_id) values ('${blk}', '${ids.w1}')`));
+await denied("an admin can't ban the CEO", () => as('admin', 'aal2', `select admin_set_flags('${ids.ceo}', null, null, true)`));
+await ok('admin bans an account for good', async () => { await db.query(`delete from auth.mfa_factors where user_id = $1`, [ids.admin]); await db.query(`update app_settings set require_staff_mfa = false`); await as('admin', 'aal1', `select admin_set_flags('${ids.w2}', null, null, true)`); return JSON.stringify((await db.query(`select banned, suspended, suspended_reason from profiles where id=$1`, [ids.w2])).rows[0]); });
+await denied('a banned account cannot appeal', () => as('w2', 'aal1', `insert into appeals (user_id, reason) values ('${ids.w2}', 'Please let me back in to work')`));
+await denied('a banned account cannot unban itself', () => as('w2', 'aal1', `update profiles set banned = false where id = '${ids.w2}'`));
+await ok('admin lifts the ban', async () => { await as('admin', 'aal1', `select admin_set_flags('${ids.w2}', null, null, false)`); return JSON.stringify((await db.query(`select banned, suspended from profiles where id=$1`, [ids.w2])).rows[0]); });
+await denied('business logo must be an own upload', () => as('biz', 'aal1', `update profiles set business_avatar_url = 'https://evil.example/x.png' where id = '${ids.biz}'`));
+await ok('business saves its own logo and about text', async () => { await as('biz', 'aal1', `update profiles set business_avatar_url = 'https://abc.supabase.co/storage/v1/object/public/avatars/${ids.biz}/logo.webp', business_bio = 'Family kitchen since 1998' where id = '${ids.biz}'`); const c = (await as('w1', 'aal1', `select profile_card('${ids.biz}', 'business') c`)).rows[0].c; return c.bio + ' / ' + (c.avatar_url ? 'logo' : 'no logo'); });
+await ok('the shift board uses the business logo, not a personal photo', async () => { const r = (await as('anon', null, `select business_avatar from open_shifts(null, null, 2000) where business_id = '${ids.biz}' limit 1`)).rows[0]; return r ? (r.business_avatar || 'none') : 'no open shifts'; });
 
 console.log(`\n${pass} passed, ${fail} failed`);

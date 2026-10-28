@@ -184,14 +184,14 @@ function Dashboard({sb, profile, email, staff, reload}: {sb: SupabaseClient; pro
     const u = new URL(location.href); u.searchParams.delete('tab'); history.replaceState(null, '', u);
     window.scrollTo({top: 0}); reload();
   }
-  const name = mode === 'business' ? profile.business_name || profile.full_name : profile.full_name || profile.business_name;
+  const name = mode === 'business' ? profile.business_name : profile.full_name;
 
   return (
     <div className="page dash" style={themeStyle(profile.theme)}>
       <section className="dash-hero">
         <div className="dash-hero-bg"><span/></div>
         <div className="dash-hero-row">
-          <a href={'profile.html?id=' + profile.id} className="dash-avatar" aria-label="View my profile"><Avatar url={profile.avatar_url} name={name} size={84} themeId={profile.theme} ring/></a>
+          <a href={'profile.html?id=' + profile.id + (mode === 'business' ? '&view=business' : '')} className="dash-avatar" aria-label="View my profile"><Avatar url={mode === 'business' ? profile.business_avatar_url : profile.avatar_url} name={name} size={84} themeId={profile.theme} ring/></a>
           <div className="dash-id">
             <p className="dash-hello">{greeting()}{profile.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}</p>
             <h1>{name || 'Your account'}{profile.verified && <BadgeCheck size={22} className="pv-check"/>}</h1>
@@ -207,7 +207,7 @@ function Dashboard({sb, profile, email, staff, reload}: {sb: SupabaseClient; pro
           </div>
         </div>
         <div className="dash-actions">
-          <a className="chip-link" href={'profile.html?id=' + profile.id}><Eye size={15}/>View profile</a>
+          <a className="chip-link" href={'profile.html?id=' + profile.id + (mode === 'business' ? '&view=business' : '')}><Eye size={15}/>{mode === 'business' ? 'View business page' : 'View profile'}</a>
           {staff && <a className="chip-link strong" href="admin.html"><ShieldCheck size={15}/>{staff === 'ceo' ? 'CEO dashboard' : 'Admin dashboard'}</a>}
           <button className="chip-link" onClick={() => sb.auth.signOut().then(reload)}><LogOut size={15}/>Sign out</button>
         </div>
@@ -323,7 +323,7 @@ function BusinessOverview({sb, profile, go}: {sb: SupabaseClient; profile: Profi
         <StatTile icon={Banknote} tone={b?.awaiting ? 'amber' : 'green'} label="Spent on shifts" value={b ? money(b.spent_zar) : '–'} sub={b?.awaiting ? `${b.awaiting} booking${b.awaiting > 1 ? 's' : ''} waiting for payment` : 'Including service fees'}/>
       </div>
       {!!b?.awaiting && <section className="card-panel nudge warn"><span className="nudge-icon"><Wallet size={22}/></span><div className="nudge-body"><h3>{b.awaiting} worker{b.awaiting > 1 ? 's are' : ' is'} waiting for you to pay into escrow</h3><p className="muted">Workers see the shift as secured once you’ve paid.</p></div><button className="btn btn-primary btn-sm themed" onClick={() => go('shifts')}>Pay now</button></section>}
-      <Completeness onFix={() => go('profile')} items={[['logo or photo', !!profile.avatar_url], ['business name', !!profile.business_name], ['what you do', (profile.bio || '').length >= 40], ['type of business', !!profile.business_type], ['hours', !!profile.business_hours], ['phone', !!profile.phone]]}/>
+      <Completeness onFix={() => go('profile')} items={[['logo', !!profile.business_avatar_url], ['business name', !!profile.business_name], ['what you do', (profile.business_bio || '').length >= 40], ['type of business', !!profile.business_type], ['hours', !!profile.business_hours], ['phone', !!profile.phone]]}/>
       <div className="quick-grid">
         <button className="quick" onClick={() => go('post')}><span><Plus size={20}/></span><strong>Post a shift</strong><small>Set the hourly rate in rand</small></button>
         <button className="quick" onClick={() => go('shifts')}><span><Users size={20}/></span><strong>Manage workers</strong><small>Hours, pay and no-shows</small></button>
@@ -376,6 +376,7 @@ function AccountSettings({sb, profile, email, mode, onSwitch, go}: {sb: Supabase
           </section>
         )}
 
+        {hiring && <BlockedWorkers sb={sb} me={profile.id}/>}
         <TwoStepCard sb={sb}/>
         <section className="card-panel section-card">
           <header className="sec-head"><KeyRound size={18}/><div><h2>Sign-in</h2><p>{email}</p></div></header>
@@ -401,6 +402,24 @@ function AccountSettings({sb, profile, email, mode, onSwitch, go}: {sb: Supabase
         <a className="link" href="privacy.html">Privacy details <ArrowRight size={15}/></a>
       </aside>
     </div>
+  );
+}
+
+function BlockedWorkers({sb, me}: {sb: SupabaseClient; me: string}) {
+  const [rows, setRows] = useState<any[] | null>(null);
+  const load = () => sb.rpc('my_blocked_workers').then(({data}) => setRows(data || []));
+  useEffect(() => { load(); }, []);
+  return (
+    <section className="card-panel section-card">
+      <header className="sec-head"><Ban size={18}/><div><h2>Blocked workers</h2><p>They can’t see or book your shifts. Block someone from your Shifts list or their profile.</p></div></header>
+      {!rows ? <span className="spinner"/> : !rows.length ? <p className="muted">You haven’t blocked anyone.</p> : rows.map(b => (
+        <div className="mode-row" key={b.worker_id}>
+          <a href={'profile.html?id=' + b.worker_id}><Avatar url={b.avatar_url} name={b.full_name} size={44} themeId={b.theme}/></a>
+          <div><strong>{b.full_name || 'Worker'}</strong><small>Blocked {new Date(b.created_at).toLocaleDateString('en-ZA')}{b.reason ? ` · ${b.reason}` : ''}</small></div>
+          <button className="btn btn-outline btn-sm" onClick={async () => { if (!confirm(`Unblock ${b.full_name || 'this worker'}? They’ll be able to book your shifts again.`)) return; await sb.from('business_blocks').delete().eq('business_id', me).eq('worker_id', b.worker_id); load(); }}>Unblock</button>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -443,6 +462,7 @@ function Suspended({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
   const pending = appeal?.status === 'pending';
   return (
     <section className="card-panel suspended">
+      {profile.banned ? <header className="sec-head"><Ban size={20}/><div><h2>This account has been closed</h2><p>Community Work has closed this account, so it can’t pick up or post shifts. If you think this is a mistake, contact us through the Help page.</p></div></header> : <>
       <header className="sec-head"><Ban size={20}/><div><h2>Your account is paused</h2><p>{profile.suspended_reason || 'Suspended by Community Work'}. You can’t pick up or post shifts until it’s restored.</p></div></header>
       {appeal === undefined ? <span className="spinner"/> : pending ? (
         <Notice>Your appeal was sent on {new Date(appeal!.created_at).toLocaleDateString('en-ZA')}. Our team will review it soon.</Notice>
@@ -462,6 +482,7 @@ function Suspended({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
           <button className="btn btn-primary" disabled={busy}>{busy && <LoaderCircle className="spin" size={18}/>}Send appeal</button>
         </form>
       )}
+      </>}
     </section>
   );
 }
@@ -555,7 +576,7 @@ function WorkerBookings({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
     <article className="card-panel booking" key={b.id}>
       <div className="booking-top"><div><h3>{b.shift.title}</h3><p className="muted small">{day(b.shift.starts_at)} · {time(b.shift.starts_at)}–{time(b.shift.ends_at)}</p></div><StatusPill status={b.status}/></div>
       <p className="meta-line"><MapPin size={15}/>{b.status === 'accepted' || b.status === 'completed' ? (b.shift.address ? `${b.shift.address}, ` : '') : ''}{b.shift.city}
-        <a className="link small" href={'profile.html?id=' + b.shift.business_id}>Business profile <ArrowUpRight size={13}/></a></p>
+        <a className="link small" href={'profile.html?view=business&id=' + b.shift.business_id}>Business profile <ArrowUpRight size={13}/></a></p>
       <p className="meta-line"><Banknote size={15}/>{money(b.shift.hourly_rate_zar)}/hr · {money(b.shift.hourly_rate_zar * hoursBetween(b.shift.starts_at, b.shift.ends_at))} for the shift · {b.shift.payment_method === 'cash' ? 'Paid in cash' : 'Escrow-protected'}</p>
       {b.payment && <p className="meta-line"><Wallet size={15}/>Pay: <PayState state={b.payment.state}/></p>}
       <div className="row-gap start">
@@ -691,6 +712,19 @@ type MyShift = {id: string; title: string; city: string; starts_at: string; ends
 
 function BusinessShifts({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
   const [rows, setRows] = useState<MyShift[] | null>(null), [err, setErr] = useState(''), [busyId, setBusyId] = useState('');
+  const [blocked, setBlocked] = useState<Set<string>>(new Set());
+  // Block a worker from all your shifts; if they're booked on an upcoming one, release them from it too.
+  const block = (a: Applicant, upcoming: boolean) => act(a.id, async () => {
+    const reason = prompt(`Block ${a.worker?.full_name || 'this worker'} from all your shifts? They won’t see or book them again. Optional reason (only you and Community Work see it):`);
+    if (reason === null) return;
+    const {error} = await sb.from('business_blocks').insert({business_id: profile.id, worker_id: a.worker_id, reason: reason.slice(0, 300) || null});
+    if (error && !/duplicate/.test(error.message)) throw error;
+    if (upcoming && a.status === 'accepted') {
+      const {error: e2} = await sb.from('applications').update({status: 'declined'}).eq('id', a.id);
+      if (e2) throw e2;
+      if (a.payment && ['awaiting_payment', 'funded'].includes(a.payment.state)) await callFunction(sb, 'payments', {action: 'cancel', paymentId: a.payment.id, reason: 'Business released and blocked the worker'});
+    }
+  });
   const load = async () => {
     const {data: shifts, error} = await sb.from('shifts').select('*').eq('business_id', profile.id).order('starts_at', {ascending: true});
     if (error) return setErr(error.message);
@@ -699,6 +733,8 @@ function BusinessShifts({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
     const workerIds = [...new Set((apps || []).map((a: any) => a.worker_id))];
     const {data: workers} = workerIds.length ? await sb.from('profiles').select('*').in('id', workerIds) : {data: []};
     const {data: pays} = await sb.from('payments').select('id, state, amount_zar, checkout_url, application_id').eq('business_id', profile.id);
+    const {data: bl} = await sb.from('business_blocks').select('worker_id').eq('business_id', profile.id);
+    setBlocked(new Set((bl || []).map((b: any) => b.worker_id)));
     setRows((shifts || []).map((s: any) => ({...s, apps: (apps || []).filter((a: any) => a.shift_id === s.id)
       .map((a: any) => ({...a, worker: workers?.find((w: any) => w.id === a.worker_id), payment: pays?.find(p => p.application_id === a.id) ?? null}))})));
   };
@@ -723,21 +759,23 @@ function BusinessShifts({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
           <div className="booking-top"><h3>{s.title}</h3><StatusPill status={s.status}/></div>
           <p className="meta-line"><CalendarDays size={15}/>{day(s.starts_at)} · {time(s.starts_at)}–{time(s.ends_at)} <MapPin size={15}/>{s.city} <Banknote size={15}/>{money(s.hourly_rate_zar)}/hr · {s.payment_method === 'cash' ? 'Cash' : 'Escrow'}</p>
           <p className="meta-line"><Users size={15}/>{s.apps.filter(a => ['accepted', 'completed'].includes(a.status)).length} of {s.workers_needed} spots filled</p>
-          {s.apps.length > 0 && (
+          {(() => { const gone = s.apps.filter(a => ['declined', 'withdrawn'].includes(a.status)).length; return gone ? <p className="muted small">{gone} cancelled or released {gone === 1 ? 'booking' : 'bookings'} hidden — {s.status === 'open' ? 'the spot is open for others again' : 'spots refilled'}.</p> : null; })()}
+          {s.apps.some(a => !['declined', 'withdrawn'].includes(a.status) || ['funded', 'disputed'].includes(a.payment?.state ?? '')) && (
             <div className="applicants">
-              {s.apps.map(a => {
+              {s.apps.filter(a => !['declined', 'withdrawn'].includes(a.status) || ['funded', 'disputed'].includes(a.payment?.state ?? '')).map(a => {
                 const w = a.worker; const shiftHours = hoursBetween(s.starts_at, s.ends_at);
                 return (
                   <div className="applicant" key={a.id}>
                     <a href={'profile.html?id=' + a.worker_id} aria-label="Worker profile"><Avatar url={w?.avatar_url} name={w?.full_name} size={46} themeId={w?.theme} ring/></a>
                     <div className="applicant-body">
-                      <a className="applicant-name" href={'profile.html?id=' + a.worker_id}>{w?.full_name || 'Worker'}{w?.verified && <BadgeCheck size={14}/>}</a> <StatusPill status={a.status}/>
+                      <a className="applicant-name" href={'profile.html?id=' + a.worker_id}>{w?.full_name || 'Worker'}{w?.verified && <BadgeCheck size={14}/>}</a> <StatusPill status={a.status}/>{blocked.has(a.worker_id) && <span className="pill declined"><Ban size={12}/>Blocked</span>}
                       {w?.headline && <small>{w.headline}</small>}
                       {w?.skills?.length ? <small>{w.skills.slice(0, 6).join(' · ')}</small> : null}
                       {a.message && <small>“{a.message}”</small>}
                       {['accepted', 'completed'].includes(a.status) && w?.phone && <small>Phone: {w.phone}</small>}
                       {a.payment && <small>Pay: <PayState state={a.payment.state}/> {money(a.payment.amount_zar)}</small>}
                       <div className="row-gap">
+                        <a className="btn btn-outline btn-sm" href={'profile.html?id=' + a.worker_id}><Eye size={14}/>Profile</a>
                         {w?.resume_path && <button className="btn btn-outline btn-sm" onClick={() => openCv(w.resume_path!)}><FileText size={14}/>CV</button>}
                         {a.status === 'applied' && <>
                           <button className="btn btn-primary btn-sm" disabled={busyId === a.id} onClick={() => update(a.id, {status: 'accepted'})}><Check size={14}/>Book</button>
@@ -766,6 +804,7 @@ function BusinessShifts({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
                         {s.payment_method === 'cash' && a.status === 'accepted' && a.hours_worked != null &&
                           <button className="btn btn-dark btn-sm" onClick={() => act(a.id, () => callFunction(sb, 'payments', {action: 'cash_paid', applicationId: a.id}))}><Banknote size={14}/>Mark paid in cash</button>}
                         {a.payment?.state === 'funded' && <button className="btn btn-outline btn-sm" onClick={() => confirm('Report a problem? Our team will review and the money stays held.') && act(a.id, () => callFunction(sb, 'payments', {action: 'dispute', paymentId: a.payment!.id}))}>Report a problem</button>}
+                        {!blocked.has(a.worker_id) && <button className="btn btn-ghost btn-sm danger" disabled={busyId === a.id} onClick={() => block(a, Date.parse(s.starts_at) > Date.now())}><Ban size={14}/>Block</button>}
                       </div>
                     </div>
                   </div>
@@ -828,7 +867,7 @@ function ShiftBoard() {
     if (!acct.ready || !acct.sb) return;
     acct.sb.rpc('open_shifts', {p_lat: area?.lat ?? null, p_lon: area?.lon ?? null, p_radius_km: area ? milesToKm(radius) : 2000, p_limit: 200})
       .then(({data, error}) => { if (error) setErr(error.message); else setRows(data as OpenShift[]); });
-    if (acct.session) acct.sb.from('applications').select('shift_id').eq('worker_id', acct.session.user.id).then(({data}) => setMine(new Set((data || []).map(d => d.shift_id))));
+    if (acct.session) acct.sb.from('applications').select('shift_id').eq('worker_id', acct.session.user.id).eq('status', 'accepted').then(({data}) => setMine(new Set((data || []).map(d => d.shift_id))));
   };
   useEffect(load, [acct.ready, acct.session?.user.id, area?.lat, area?.lon, radius]);
 
@@ -876,7 +915,7 @@ function ShiftBoard() {
             return (
               <article className="job-card shift-card" key={s.id} style={themeStyle(s.business_theme)}>
                 <div className="card-head">
-                  <a href={s.business_id ? 'profile.html?id=' + s.business_id : undefined} aria-label={s.business_name + ' profile'}><Avatar url={s.business_avatar} name={s.business_name} size={46} themeId={s.business_theme} ring/></a>
+                  <a href={s.business_id ? 'profile.html?view=business&id=' + s.business_id : undefined} aria-label={s.business_name + ' profile'}><Avatar url={s.business_avatar} name={s.business_name} size={46} themeId={s.business_theme} ring/></a>
                   <div className="card-title"><h3>{s.title}</h3><p>{s.business_name}{s.business_verified && <> · <BadgeCheck size={13}/> Verified</>}</p></div>
                   <span className="spots">{left} {left === 1 ? 'spot' : 'spots'} left</span>
                 </div>
@@ -1132,7 +1171,7 @@ function UsersAdmin({sb}: {sb: SupabaseClient}) {
   const [q, setQ] = useState(''), [rows, setRows] = useState<any[] | null>(null), [err, setErr] = useState('');
   const load = (search = q) => sb.rpc('admin_users', {p_search: search, p_limit: 100, p_offset: 0}).then(({data, error}) => error ? setErr(error.message) : setRows(data));
   useEffect(() => { load(''); }, []);
-  const flag = async (id: string, patch: {p_verified?: boolean; p_suspended?: boolean}) => { const {error} = await sb.rpc('admin_set_flags', {p_user: id, ...patch}); if (error) alert(error.message); load(); };
+  const flag = async (id: string, patch: {p_verified?: boolean; p_suspended?: boolean; p_banned?: boolean}) => { const {error} = await sb.rpc('admin_set_flags', {p_user: id, ...patch}); if (error) alert(error.message); load(); };
   return (
     <div className="stack">
       <form className="search-box big" onSubmit={e => { e.preventDefault(); load(); }}><Search size={18}/><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search by email, name or business"/><button className="btn btn-dark btn-sm">Search</button></form>
@@ -1147,10 +1186,11 @@ function UsersAdmin({sb}: {sb: SupabaseClient}) {
               <td>{[u.city, u.province].filter(Boolean).join(', ') || '—'}</td>
               <td>{new Date(u.created_at).toLocaleDateString('en-ZA')}</td>
               <td>{u.strikes ?? 0}{u.total_strikes ? <small className="muted"> ({u.total_strikes} all-time)</small> : null}</td>
-              <td>{u.suspended ? <span className="pill declined">Suspended</span> : u.verified ? <span className="pill accepted">Verified</span> : <span className="pill">Active</span>}</td>
+              <td>{u.banned ? <span className="pill declined">Banned</span> : u.suspended ? <span className="pill declined">Suspended</span> : u.verified ? <span className="pill accepted">Verified</span> : <span className="pill">Active</span>}{u.blocked_by ? <><br/><small className="muted">blocked by {u.blocked_by} business{u.blocked_by > 1 ? 'es' : ''}</small></> : null}</td>
               <td className="row-gap">
                 <button className="btn btn-outline btn-sm" onClick={() => flag(u.id, {p_verified: !u.verified})}>{u.verified ? 'Unverify' : 'Verify'}</button>
-                <button className="btn btn-outline btn-sm" onClick={() => confirm(u.suspended ? 'Restore this account?' : 'Suspend this account? They won’t be able to post or apply.') && flag(u.id, {p_suspended: !u.suspended})}>{u.suspended ? 'Restore' : 'Suspend'}</button>
+                {!u.banned && <button className="btn btn-outline btn-sm" onClick={() => confirm(u.suspended ? 'Restore this account?' : 'Suspend this account? They won’t be able to post or pick up shifts, but they can appeal.') && flag(u.id, {p_suspended: !u.suspended})}>{u.suspended ? 'Restore' : 'Suspend'}</button>}
+                <button className="btn btn-ghost btn-sm danger" onClick={() => confirm(u.banned ? 'Lift the ban and restore this account?' : 'Ban this account for good? They can’t work or hire on Community Work again, and can’t appeal.') && flag(u.id, {p_banned: !u.banned})}><Ban size={14}/>{u.banned ? 'Lift ban' : 'Ban'}</button>
               </td>
             </tr>))}</tbody>
         </table></section>

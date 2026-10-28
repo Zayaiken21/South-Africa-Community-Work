@@ -17,6 +17,7 @@ Do these steps once, in order. Nothing here needs a terminal except step 5.
 | `supabase/migrations/20261028140000_dual_accounts_profiles.sql` | One account for working and hiring, profile photos, themes, detailed profiles |
 | `supabase/migrations/20261028160000_optional_2step_cleanup.sql` | Two-step sign-in becomes optional; deleting jobs; nightly clean-up of old data |
 | `supabase/migrations/20261028180000_one_mode_at_a_time.sql` | One mode at a time: Working or Hiring, switched from the dashboard |
+| `supabase/migrations/20261028200000_rebook_blocks_business_profiles.sql` | Re-booking after cancellations, business blocks, permanent bans, business-only profiles |
 
 They keep all existing data. `supabase/repair-accounts.sql` fixes logins created before the database was set up.
 

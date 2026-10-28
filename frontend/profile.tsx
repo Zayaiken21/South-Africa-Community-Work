@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {
   BadgeCheck, Camera, Car, Check, Clock, FileText, FileUp, Globe, GraduationCap, Languages, LoaderCircle, MapPin, Phone,
-  Plus, Trash2, X, Briefcase, CalendarDays, Building2, Star, Users, ArrowUpRight, Palette, Eye, Lock, UserRound, Sparkles,
+  Plus, Trash2, X, Briefcase, CalendarDays, Building2, Star, Users, ArrowUpRight, Palette, Eye, Lock, UserRound, Sparkles, Ban,
 } from 'lucide-react';
 import {useAccount, modes, type Experience, type Profile} from './backend';
 import {THEMES, theme, themeStyle} from './themes';
@@ -16,10 +16,15 @@ const SKILL_IDEAS = ['Customer service', 'Cash handling', 'Cooking', 'Cleaning',
 
 // What a profile page shows. Comes from profile_card() for other people, or is built from your own profile.
 export type Card = Partial<Profile> & {
-  id: string; is_me?: boolean; member_since?: string; shifts_completed?: number; strikes_total?: number;
-  shifts_posted?: number; workers_hired?: number;
+  id: string; view?: 'worker' | 'business'; is_me?: boolean; member_since?: string; shifts_completed?: number; strikes_total?: number;
+  shifts_posted?: number; workers_hired?: number; shifts_paid?: number; blocked_by_me?: boolean;
 };
-export const ownCard = (p: Profile): Card => ({...p, is_me: true, member_since: p.created_at});
+// Your own profile shown the way others see it: the worker side, or only the business side.
+export const ownCard = (p: Profile, view: 'worker' | 'business' = 'worker'): Card => view === 'business'
+  ? {id: p.id, view, is_me: true, member_since: p.created_at, business_name: p.business_name, business_type: p.business_type, bio: p.business_bio,
+     avatar_url: p.business_avatar_url, theme: p.theme, business_hours: p.business_hours, website: p.website, city: p.city, province: p.province,
+     verified: p.verified, phone: p.phone}
+  : {...p, view, is_me: true, member_since: p.created_at};
 
 export const initialsOf = (name?: string | null) =>
   (name || '?').replace(/[^\p{L}\p{N} ]/gu, '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
@@ -44,7 +49,8 @@ async function squarePhoto(file: File, size = 512): Promise<Blob> {
   return new Promise((ok, fail) => c.toBlob(b => (b ? ok(b) : fail(new Error('Could not read that photo.'))), 'image/webp', .88));
 }
 
-function PhotoPicker({sb, profile, onChange}: {sb: SupabaseClient; profile: Profile; onChange: (url: string | null) => void}) {
+function PhotoPicker({sb, profile, onChange, field = 'avatar_url'}: {sb: SupabaseClient; profile: Profile; onChange: (url: string | null) => void; field?: 'avatar_url' | 'business_avatar_url'}) {
+  const current = profile[field] ?? null;
   const [busy, setBusy] = useState(false), [err, setErr] = useState('');
   const input = useRef<HTMLInputElement>(null);
   async function pick(file: File) {
@@ -58,32 +64,32 @@ function PhotoPicker({sb, profile, onChange}: {sb: SupabaseClient; profile: Prof
       const {error} = await sb.storage.from('avatars').upload(path, blob, {contentType: 'image/webp', cacheControl: '31536000'});
       if (error) throw error;
       const url = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
-      const {error: e2} = await sb.from('profiles').update({avatar_url: url}).eq('id', profile.id);
+      const {error: e2} = await sb.from('profiles').update({[field]: url}).eq('id', profile.id);
       if (e2) throw e2;
-      const old = profile.avatar_url?.split('/avatars/')[1];
+      const old = current?.split('/avatars/')[1];
       if (old) sb.storage.from('avatars').remove([decodeURIComponent(old)]);
       onChange(url);
     } catch (e: any) { setErr(e?.message || 'Upload failed.'); }
     finally { setBusy(false); if (input.current) input.current.value = ''; }
   }
   async function remove() {
-    const old = profile.avatar_url?.split('/avatars/')[1];
-    await sb.from('profiles').update({avatar_url: null}).eq('id', profile.id);
+    const old = current?.split('/avatars/')[1];
+    await sb.from('profiles').update({[field]: null}).eq('id', profile.id);
     if (old) await sb.storage.from('avatars').remove([decodeURIComponent(old)]);
     onChange(null);
   }
   return (
     <div className="photo-picker">
       <button type="button" className="photo-btn" onClick={() => input.current?.click()} aria-label="Change profile photo">
-        <Avatar url={profile.avatar_url} name={profile.full_name || profile.business_name} size={112} themeId={profile.theme} ring/>
+        <Avatar url={current} name={field === 'business_avatar_url' ? profile.business_name : profile.full_name} size={112} themeId={profile.theme} ring/>
         <span className="photo-cam">{busy ? <LoaderCircle className="spin" size={18}/> : <Camera size={18}/>}</span>
       </button>
       <div className="photo-actions">
-        <strong>Profile photo</strong>
-        <small>A clear photo of your face (or your logo for a business). We crop it into a circle.</small>
+        <strong>{field === 'business_avatar_url' ? 'Business logo' : 'Profile photo'}</strong>
+        <small>{field === 'business_avatar_url' ? 'Your logo or a photo of your shop. Workers see this, never your personal photo.' : 'A clear photo of your face. We crop it into a circle.'}</small>
         <div className="row-gap">
-          <button type="button" className="btn btn-outline btn-sm" onClick={() => input.current?.click()} disabled={busy}><Camera size={15}/>{profile.avatar_url ? 'Change photo' : 'Add photo'}</button>
-          {profile.avatar_url && <button type="button" className="btn btn-ghost btn-sm" onClick={remove}><Trash2 size={15}/>Remove</button>}
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => input.current?.click()} disabled={busy}><Camera size={15}/>{current ? 'Change' : 'Add'} {field === 'business_avatar_url' ? 'logo' : 'photo'}</button>
+          {current && <button type="button" className="btn btn-ghost btn-sm" onClick={remove}><Trash2 size={15}/>Remove</button>}
         </div>
         {err && <p className="alert">{err}</p>}
       </div>
@@ -109,9 +115,9 @@ export function ThemePicker({value, onChange}: {value?: string; onChange: (id: s
 const since = (d?: string) => d ? new Date(d).toLocaleDateString('en-ZA', {month: 'long', year: 'numeric'}) : '';
 
 export function ProfileView({card, sb, compact = false, mode}: {card: Card; sb?: SupabaseClient | null; compact?: boolean; mode?: 'worker' | 'business'}) {
-  const showWork = mode ? mode === 'worker' : card.can_work ?? card.account_type === 'worker';
-  const showBiz = mode ? mode === 'business' : card.can_hire ?? card.account_type === 'business';
-  const name = mode === 'business' ? card.business_name || card.full_name : card.full_name || card.business_name;
+  const view = card.view ?? mode ?? 'worker';
+  const showWork = view === 'worker', showBiz = view === 'business';
+  const name = showBiz ? card.business_name : card.full_name;
   const done = card.shifts_completed ?? 0, strikes = card.strikes_total ?? 0;
   const reliability = done + strikes > 0 ? Math.round(done / (done + strikes) * 100) : null;
   const avail = card.availability ?? [];
@@ -127,7 +133,7 @@ export function ProfileView({card, sb, compact = false, mode}: {card: Card; sb?:
         <Avatar url={card.avatar_url} name={name} size={compact ? 84 : 124} themeId={card.theme} ring/>
         <div className="pv-title">
           <h1>{name || 'Your name'}{card.verified && <BadgeCheck size={compact ? 18 : 22} className="pv-check" aria-label="Verified"/>}</h1>
-          {(mode === 'business' ? card.business_type : card.headline) && <p className="pv-headline">{mode === 'business' ? card.business_type : card.headline}</p>}
+          {(showBiz ? card.business_type : card.headline) && <p className="pv-headline">{showBiz ? card.business_type : card.headline}</p>}
           <p className="pv-meta">
             {(card.city || card.province) && <span><MapPin size={14}/>{[card.city, card.province].filter(Boolean).join(', ')}</span>}
             {card.member_since && <span><CalendarDays size={14}/>Member since {since(card.member_since)}</span>}
@@ -142,8 +148,9 @@ export function ProfileView({card, sb, compact = false, mode}: {card: Card; sb?:
       <div className="pv-stats">
         {showWork && <div><strong>{done}</strong><span>shifts completed</span></div>}
         {showWork && <div><strong>{reliability == null ? 'New' : reliability + '%'}</strong><span>reliability</span></div>}
-        {showBiz && (mode === 'business' || !showWork || (card.shifts_posted ?? 0) > 0) && <div><strong>{card.shifts_posted ?? 0}</strong><span>shifts posted</span></div>}
-        {showBiz && (mode === 'business' || !showWork || (card.shifts_posted ?? 0) > 0) && <div><strong>{card.workers_hired ?? 0}</strong><span>workers hired</span></div>}
+        {showBiz && <div><strong>{card.shifts_posted ?? 0}</strong><span>shifts posted</span></div>}
+        {showBiz && <div><strong>{card.workers_hired ?? 0}</strong><span>workers hired</span></div>}
+        {showBiz && card.shifts_paid != null && <div><strong>{card.shifts_paid}</strong><span>shifts paid</span></div>}
       </div>
 
       <div className="pv-body">
@@ -170,10 +177,9 @@ export function ProfileView({card, sb, compact = false, mode}: {card: Card; sb?:
             </dl>
           </section>
         )}
-        {showBiz && (card.business_hours || card.website || card.business_name) && (
-          <section><h3>Business</h3>
+        {showBiz && (card.business_hours || card.website) && (
+          <section><h3>Business details</h3>
             <dl className="pv-facts">
-              {card.business_name && <><dt><Building2 size={15}/>Name</dt><dd>{card.business_name}</dd></>}
               {card.business_hours && <><dt><Clock size={15}/>Hours</dt><dd>{card.business_hours}</dd></>}
               {card.website && <><dt><Globe size={15}/>Website</dt><dd><a className="link" href={card.website} target="_blank" rel="noopener noreferrer nofollow">{card.website.replace(/^https?:\/\//, '')}<ArrowUpRight size={13}/></a></dd></>}
             </dl>
@@ -194,13 +200,15 @@ export function ProfileView({card, sb, compact = false, mode}: {card: Card; sb?:
 // ---------------------------------------------------------------- profile page (profile.html?id=…)
 export function ProfilePage() {
   const acct = useAccount();
-  const id = new URLSearchParams(location.search).get('id');
+  const q = new URLSearchParams(location.search);
+  const id = q.get('id'), view = q.get('view') === 'business' ? 'business' : 'worker';
   const [card, setCard] = useState<Card | null | undefined>(undefined);
-  useEffect(() => {
-    if (!acct.ready || !acct.sb || !acct.session) return;
-    const target = id || acct.session.user.id;
-    acct.sb.rpc('profile_card', {p_id: target}).then(({data}) => setCard((data as Card) ?? null));
-  }, [acct.ready, acct.session?.user.id, id]);
+  const [busy, setBusy] = useState(false), [note, setNote] = useState('');
+  const load = () => {
+    if (!acct.sb || !acct.session) return;
+    acct.sb.rpc('profile_card', {p_id: id || acct.session.user.id, p_view: view}).then(({data}) => setCard((data as Card) ?? null));
+  };
+  useEffect(load, [acct.ready, acct.session?.user.id, id, view]);
   if (!acct.ready) return <div className="page"><div className="card-panel center"><span className="spinner"/></div></div>;
   if (!acct.session) return (
     <div className="page reading"><div className="empty">
@@ -211,10 +219,30 @@ export function ProfilePage() {
   );
   if (card === undefined) return <div className="page"><div className="card-panel center"><span className="spinner"/></div></div>;
   if (card === null) return <div className="page reading"><div className="empty"><h2>Profile not available</h2><p>This profile doesn’t exist or isn’t public right now.</p><a className="btn btn-primary" href="shifts.html">Browse shifts</a></div></div>;
+  const hiring = acct.profile && modes(acct.profile).active === 'business';
+  const canBlock = hiring && card.view === 'worker' && !card.is_me;
+  async function toggleBlock() {
+    if (!acct.sb || !acct.session) return;
+    setBusy(true); setNote('');
+    if (card!.blocked_by_me) {
+      const {error} = await acct.sb.from('business_blocks').delete().eq('business_id', acct.session.user.id).eq('worker_id', card!.id);
+      setNote(error ? error.message : 'Unblocked. They can book your shifts again.');
+    } else {
+      const reason = prompt(`Block ${card!.full_name || 'this worker'} from your shifts? They won’t see or book your shifts. Optional reason (only you and Community Work see it):`);
+      if (reason === null) { setBusy(false); return; }
+      const {error} = await acct.sb.from('business_blocks').insert({business_id: acct.session.user.id, worker_id: card!.id, reason: reason.slice(0, 300) || null});
+      setNote(error ? error.message : 'Blocked. They can no longer see or book your shifts.');
+    }
+    setBusy(false); load();
+  }
   return (
     <div className="page profile-page">
       <ProfileView card={card} sb={acct.sb}/>
-      {card.is_me && <p className="center-text"><a className="btn btn-outline" href="account.html?tab=profile"><Palette size={16}/>Edit profile and theme</a></p>}
+      <div className="profile-actions">
+        {card.is_me && <a className="btn btn-outline" href="account.html?tab=profile"><Palette size={16}/>Edit profile and theme</a>}
+        {canBlock && <button className={'btn ' + (card.blocked_by_me ? 'btn-outline' : 'btn-ghost danger')} disabled={busy} onClick={toggleBlock}><Ban size={16}/>{card.blocked_by_me ? 'Unblock from my shifts' : 'Block from my shifts'}</button>}
+      </div>
+      {note && <p className="hint-box">{note}</p>}
     </div>
   );
 }
@@ -235,7 +263,7 @@ export function ProfileEditor({sb, profile, onSaved, mode}: {sb: SupabaseClient;
 
   const checks = mode === 'worker'
     ? [['Photo', !!p.avatar_url], ['Headline', !!p.headline], ['About you', (p.bio || '').length >= 40], ['3+ skills', p.skills.length >= 3], ['Availability', (p.availability ?? []).length > 0], ['Experience', exp.length > 0], ['CV', !!p.resume_path]] as const
-    : [['Logo or photo', !!p.avatar_url], ['Business name', !!p.business_name], ['What you do', (p.bio || '').length >= 40], ['Type of business', !!p.business_type], ['Hours', !!p.business_hours], ['Phone', !!p.phone]] as const;
+    : [['Logo', !!p.business_avatar_url], ['Business name', !!p.business_name], ['What you do', (p.business_bio || '').length >= 40], ['Type of business', !!p.business_type], ['Hours', !!p.business_hours], ['Phone', !!p.phone]] as const;
   const score = Math.round(checks.filter(c => c[1]).length / checks.length * 100);
 
   async function save(e?: React.FormEvent) {
@@ -243,6 +271,7 @@ export function ProfileEditor({sb, profile, onSaved, mode}: {sb: SupabaseClient;
     const website = (p.website || '').trim();
     const {error} = await sb.from('profiles').update({
       full_name: p.full_name?.trim() || null, headline: p.headline?.trim() || null, bio: p.bio?.trim() || null, skills: p.skills,
+      business_bio: p.business_bio?.trim() || null,
       phone: p.phone?.trim() || null, city: p.city?.trim() || null, province: p.province || null,
       business_name: p.business_name?.trim() || null, business_reg: p.business_reg?.trim() || null,
       theme: p.theme || 'savanna', languages: p.languages, availability: p.availability, has_transport: p.has_transport ?? null,
@@ -288,8 +317,8 @@ export function ProfileEditor({sb, profile, onSaved, mode}: {sb: SupabaseClient;
     <form className="editor" onSubmit={save}>
       <div className="editor-main">
         <section className="card-panel form section-card">
-          <header className="sec-head"><Palette size={18}/><div><h2>Photo and style</h2><p>How your profile looks to {mode === 'worker' ? 'businesses' : 'workers'}.</p></div></header>
-          <PhotoPicker sb={sb} profile={p} onChange={url => { set('avatar_url', url); onSaved(); }}/>
+          <header className="sec-head"><Palette size={18}/><div><h2>{mode === 'business' ? 'Logo and style' : 'Photo and style'}</h2><p>How your {mode === 'business' ? 'business page' : 'profile'} looks to {mode === 'worker' ? 'businesses' : 'workers'}.</p></div></header>
+          <PhotoPicker sb={sb} profile={p} field={mode === 'business' ? 'business_avatar_url' : 'avatar_url'} onChange={url => { set(mode === 'business' ? 'business_avatar_url' : 'avatar_url', url); onSaved(); }}/>
           <div className="field"><span>Profile theme</span><ThemePicker value={p.theme} onChange={v => set('theme', v)}/></div>
         </section>
 
@@ -311,8 +340,8 @@ export function ProfileEditor({sb, profile, onSaved, mode}: {sb: SupabaseClient;
               <label className="field">Type of business<input value={p.business_type || ''} onChange={e => set('business_type', e.target.value)} maxLength={60} placeholder="e.g. Restaurant, warehouse, events"/></label>
             </div>
             <label className="field">What you do
-              <textarea rows={5} value={p.bio || ''} onChange={e => set('bio', e.target.value)} maxLength={1000} placeholder="What your business does and what a shift with you is like."/>
-              <small>{(p.bio || '').length}/1000</small>
+              <textarea rows={5} value={p.business_bio || ''} onChange={e => set('business_bio', e.target.value)} maxLength={1000} placeholder="What your business does and what a shift with you is like."/>
+              <small>{(p.business_bio || '').length}/1000</small>
             </label>
             <div className="grid-2">
               <label className="field">Trading hours<input value={p.business_hours || ''} onChange={e => set('business_hours', e.target.value)} maxLength={120} placeholder="Mon–Sat, 08:00–18:00"/></label>
@@ -420,8 +449,8 @@ export function ProfileEditor({sb, profile, onSaved, mode}: {sb: SupabaseClient;
         <button type="button" className="btn btn-outline btn-block show-sm" onClick={() => setPreview(v => !v)}><Eye size={16}/>{preview ? 'Hide preview' : 'Preview my profile'}</button>
         <div className={'preview-wrap' + (preview ? ' open' : '')}>
           <p className="overline">Live preview</p>
-          <ProfileView card={{...ownCard(p), can_work: m.work, can_hire: m.hire}} compact mode={mode}/>
-          <a className="link" href={'profile.html?id=' + p.id}>Open my public profile <ArrowUpRight size={14}/></a>
+          <ProfileView card={ownCard(p, mode)} compact/>
+          <a className="link" href={'profile.html?id=' + p.id + (mode === 'business' ? '&view=business' : '')}>Open my public {mode === 'business' ? 'business page' : 'profile'} <ArrowUpRight size={14}/></a>
         </div>
       </aside>
 
