@@ -31,7 +31,10 @@ function useInstall() {
 }
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js', {updateViaCache: 'none'}).then(reg => reg.update()).catch(() => {}));
+  // When a new version takes over, reload once so people never keep using an old copy.
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded && navigator.serviceWorker.controller) { reloaded = true; location.reload(); } });
 }
 
 // Ads stay off account, admin, legal and offline pages.

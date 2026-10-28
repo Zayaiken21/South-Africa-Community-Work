@@ -72,8 +72,8 @@ self.addEventListener('fetch',e=>{
     if(u.hostname.endsWith('fonts.gstatic.com')||u.hostname.endsWith('fonts.googleapis.com')||u.hostname==='cdnjs.cloudflare.com'||u.hostname==='cdn.jsdelivr.net')e.respondWith(caches.open(CACHE).then(async c=>(await c.match(r))||fetch(r).then(res=>{c.put(r,res.clone());return res;})));
     return;
   }
-  if(r.mode==='navigate'){e.respondWith(fetch(r).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(async()=>(await caches.match(r,{ignoreSearch:true}))||caches.match('./offline.html')));return;}
-  if(u.pathname.endsWith('/data/jobs-feed.json')||u.pathname.endsWith('/ads-config.json')||u.pathname.endsWith('/affiliates.json')||u.pathname.endsWith('/backend-config.json')||u.pathname.endsWith('/analytics-config.json')){e.respondWith(fetch(r).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(()=>caches.match(r,{ignoreSearch:true})));return;}
+  if(r.mode==='navigate'){e.respondWith(fetch(r,{cache:'no-cache'}).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(async()=>(await caches.match(r,{ignoreSearch:true}))||caches.match('./offline.html')));return;}
+  if(u.pathname.endsWith('/data/jobs-feed.json')||u.pathname.endsWith('/ads-config.json')||u.pathname.endsWith('/affiliates.json')||u.pathname.endsWith('/backend-config.json')||u.pathname.endsWith('/analytics-config.json')){e.respondWith(fetch(r,{cache:'no-cache'}).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(()=>caches.match(r,{ignoreSearch:true})));return;}
   e.respondWith(caches.match(r).then(hit=>hit||fetch(r).then(res=>{if(res.ok){const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));}return res;})));
 });
 `);
