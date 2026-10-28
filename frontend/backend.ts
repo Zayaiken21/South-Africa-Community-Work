@@ -24,7 +24,22 @@ export type Profile = {
   id: string; account_type: 'worker' | 'business'; full_name: string | null; headline: string | null; bio: string | null;
   skills: string[]; phone: string | null; city: string | null; province: string | null; lat: number | null; lon: number | null;
   resume_path: string | null; business_name: string | null; business_reg: string | null; payout_ready: boolean; verified: boolean; suspended: boolean;
+  // Dual accounts and detailed profiles (database upgrade 2). Optional so the site still works before the upgrade is run.
+  can_work?: boolean; can_hire?: boolean; active_mode?: 'worker' | 'business';
+  avatar_url?: string | null; theme?: string; languages?: string[]; availability?: string[]; has_transport?: boolean | null;
+  drivers_licence?: string | null; education?: string | null; experience?: Experience[]; business_type?: string | null;
+  business_hours?: string | null; website?: string | null; created_at?: string;
+  strikes?: number; suspended_reason?: string | null;
 };
+export type Experience = {role: string; place: string; years?: string; note?: string};
+
+// Which modes an account has switched on, with fallbacks for accounts made before upgrade 2.
+export function modes(p: Profile) {
+  const work = p.can_work ?? p.account_type === 'worker';
+  const hire = p.can_hire ?? p.account_type === 'business';
+  const active: 'worker' | 'business' = p.active_mode ?? p.account_type;
+  return {work, hire, active, dual: work && hire};
+}
 
 // Session + profile + staff role, kept in sync with sign-in changes.
 export function useAccount() {

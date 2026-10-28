@@ -19,6 +19,7 @@ const pages = {
   'shifts.html': ['Paid shifts near you', 'Book paid shifts with local businesses in South Africa. Hourly pay in rand, secured in escrow before you start.'],
   'account.html': ['Your account', 'Sign in or create a Community Work account to apply for shifts or hire workers.'],
   'admin.html': ['Team dashboard', 'Community Work team dashboard.'],
+  'profile.html': ['Profile', 'A Community Work member profile: skills, experience and shifts completed.'],
   'job.html': ['Job details', 'View a local opportunity, check pay and hours, and contact the poster.'],
   'saved-jobs.html': ['Saved jobs', 'Revisit jobs you saved on this device.'],
   'how-it-works.html': ['How it works', 'Learn how to find local and online work and post jobs on Community Work South Africa.'],
@@ -29,7 +30,7 @@ const pages = {
   'offline.html': ['You’re offline', 'Connect to the internet to load the latest jobs.'],
   '404.html': ['Page not found', 'Find your way back to Community Work South Africa.'],
 };
-const hidden = ['job.html', 'saved-jobs.html', '404.html', 'offline.html', 'admin.html'];
+const hidden = ['job.html', 'saved-jobs.html', '404.html', 'offline.html', 'admin.html', 'profile.html'];
 const base = 'https://zayaiken21.github.io/South-Africa-Community-Work/';
 
 for (const [file, [title, description]] of Object.entries(pages)) {

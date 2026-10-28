@@ -60,7 +60,7 @@ async function profile(id: string) {
 
 async function payoutSetup(who: Caller, b: any) {
   const me = await profile(who.id);
-  if (me.account_type !== 'worker') throw new HttpError(403, 'Payout details are for worker accounts.');
+  if (!me.can_work) throw new HttpError(403, 'Switch on working in your account settings to add payout details.');
   const bank = {bank: text(b.bank, 30).toUpperCase(), accountNumber: text(b.accountNumber, 20).replace(/\D/g, ''),
                 accountType: b.accountType === 'SAVINGS' ? 'SAVINGS' as const : 'CHEQUE' as const};
   if (!BANKS.includes(bank.bank)) throw new HttpError(400, 'Choose your bank.');

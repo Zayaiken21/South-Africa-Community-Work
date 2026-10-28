@@ -1,6 +1,7 @@
 // Security tests for the database rules. Runs the migration in an in-process Postgres (PGlite) with stand-ins
 // for Supabase auth and storage, then acts as the CEO, an admin, a business, two workers and an anonymous visitor.
-//   npm i @electric-sql/pglite   then   node supabase/tests/security.test.mjs supabase/migrations/20261028000000_marketplace.sql
+//   npm i @electric-sql/pglite
+//   cat supabase/migrations/*.sql > /tmp/all.sql && node supabase/tests/security.test.mjs /tmp/all.sql
 import {PGlite} from '@electric-sql/pglite';
 import {readFileSync} from 'node:fs';
 const db = new PGlite();
@@ -95,7 +96,7 @@ await denied('worker cannot re-take a shift they cancelled', () => as('w2', 'aal
 // profile protections
 await denied('worker cannot mark itself verified', () => as('w1', 'aal1', `update profiles set verified = true where id = '${ids.w1}'`));
 await denied('worker cannot set payout flag', () => as('w1', 'aal1', `update profiles set payout_ready = true where id = '${ids.w1}'`));
-await denied('worker cannot switch to business after applying', () => as('w1', 'aal1', `update profiles set account_type = 'business' where id = '${ids.w1}'`));
+await ok('account type only follows the switched-on mode', async () => { await as('w1', 'aal1', `update profiles set account_type = 'business' where id = '${ids.w1}'`); const t = (await db.query(`select account_type from profiles where id=$1`, [ids.w1])).rows[0].account_type; if (t !== 'worker') throw new Error(t); return t; });
 await ok('worker edits own bio and skills', async () => { await as('w1', 'aal1', `update profiles set bio = 'Hard worker', skills = '{cooking,cleaning}' where id = '${ids.w1}'`); return (await db.query(`select skills from profiles where id=$1`, [ids.w1])).rows[0].skills; });
 await denied("worker cannot edit someone else's profile", async () => { const r = await as('w1', 'aal1', `update profiles set bio = 'x' where id = '${ids.w2}'`); return {rows: [], affectedRows: r.affectedRows, ...(r.affectedRows ? {rows: [1]} : {})}; });
 
@@ -128,7 +129,7 @@ await ok("worker 2 cannot open worker 1's CV", async () => { const r = await as(
 
 await ok('business records 8 hours and confirms', async () => { await as('biz', 'aal1', `update applications set hours_worked = 8, business_confirmed_at = now() where id = '${a1}'`); return (await db.query(`select hours_worked from applications where id=$1`, [a1])).rows[0].hours_worked; });
 await ok('worker confirms the hours', async () => { await as('w1', 'aal1', `update applications set worker_confirmed_at = now() where id = '${a1}'`); return !!(await db.query(`select worker_confirmed_at from applications where id=$1`, [a1])).rows[0].worker_confirmed_at; });
-await ok('new user can still switch to business before any activity', async () => { await as('d', 'aal1', `update profiles set account_type = 'business' where id = '${ids.d}'`); return (await db.query(`select account_type from profiles where id=$1`, [ids.d])).rows[0].account_type; });
+await ok('user turns on hiring with a business name and switches to it', async () => { await as('d', 'aal1', `update profiles set business_name = 'D Plumbing', can_hire = true, active_mode = 'business' where id = '${ids.d}'`); return (await db.query(`select account_type from profiles where id=$1`, [ids.d])).rows[0].account_type; });
 await ok('admin searches users by email', async () => (await as('admin', 'aal2', `select email from admin_users('thabo')`)).rows.map(r => r.email).join());
 await ok("search text can't break out of the query", async () => (await as('admin', 'aal2', `select count(*)::int n from admin_users($1)`, ["x' or 1=1 --"])).rows[0].n);
 await denied('worker cannot run admin search', async () => { const r = await as('w1', 'aal2', `select * from admin_users('')`); return r.rows.length ? r : {rows: [], affectedRows: 0}; });
@@ -161,5 +162,34 @@ await ok('restored worker can pick up shifts again', async () => pick('w2', awai
 await ok('3 more cancellations → suspended again', async () => { for (const d of [14, 15, 16]) { const app = await pick('w2', await post(d)); await as('w2', 'aal1', `update applications set status = 'withdrawn' where id = '${app}'`); } return JSON.stringify(await strikesOf('w2')); });
 await ok('business releasing a worker is not a strike for the worker', async () => { const app = await pick('w1', await post(20)); await as('biz', 'aal1', `update applications set status = 'declined' where id = '${app}'`); return JSON.stringify(await strikesOf('w1')); });
 await ok('dashboard shows reliability numbers', async () => JSON.stringify((await as('ceo', 'aal2', `select admin_stats(30) s`)).rows[0].s.reliability));
+
+// one account, two modes: working and hiring
+const shiftFor = (owner, days) => `insert into shifts (business_id, title, description, category, city, province, lat, lon, starts_at, ends_at, hourly_rate_zar, workers_needed)
+  values ('${ids[owner]}', 'Dual ${days}', 'Prep and wash up for lunch service', 'Hospitality', 'Braamfontein', 'Gauteng', -26.193, 28.031, '${at(days, 6).toISOString()}', '${at(days, 12).toISOString()}', 45, 1) returning id`;
+await ok('existing accounts keep their mode', async () => JSON.stringify((await db.query(`select account_type, active_mode, can_work, can_hire from profiles where id in ($1, $2) order by account_type`, [ids.w1, ids.biz])).rows));
+await denied('worker without hiring switched on cannot post', () => as('w1', 'aal1', shiftFor('w1', 30)));
+await denied('turning on hiring needs a business name', () => as('w1', 'aal1', `update profiles set can_hire = true where id = '${ids.w1}'`));
+await denied("can't switch to hiring mode before hiring is on", () => as('w1', 'aal1', `update profiles set active_mode = 'business' where id = '${ids.w1}'`));
+await ok('worker turns on hiring and switches to it', async () => { await as('w1', 'aal1', `update profiles set business_name = 'Thabo Car Wash', can_hire = true, active_mode = 'business' where id = '${ids.w1}'`); return JSON.stringify((await db.query(`select account_type, can_work, can_hire from profiles where id=$1`, [ids.w1])).rows[0]); });
+let dualShift;
+await ok('dual account posts a shift', async () => { dualShift = (await as('w1', 'aal1', shiftFor('w1', 31))).rows[0].id; return 'ok'; });
+await denied("can't pick up your own shift", () => as('w1', 'aal1', `insert into applications (shift_id, worker_id) values ('${dualShift}', '${ids.w1}')`));
+await denied("can't turn off hiring with an upcoming shift", () => as('w1', 'aal1', `update profiles set active_mode = 'worker', can_hire = false where id = '${ids.w1}'`));
+await ok('switching back to working keeps hiring on', async () => { await as('w1', 'aal1', `update profiles set active_mode = 'worker' where id = '${ids.w1}'`); return (await db.query(`select account_type from profiles where id=$1`, [ids.w1])).rows[0].account_type; });
+await ok('business turns on working and picks up the shift', async () => { await as('biz', 'aal1', `update profiles set can_work = true where id = '${ids.biz}'`); return (await as('biz', 'aal1', `insert into applications (shift_id, worker_id) values ('${dualShift}', '${ids.biz}') returning status`)).rows[0].status; });
+await denied('turning off every mode is refused', () => as('d', 'aal1', `update profiles set can_work = false, can_hire = false where id = '${ids.d}'`));
+await denied('profile photo must be your own upload', () => as('w2', 'aal1', `update profiles set avatar_url = 'https://evil.example/pixel.png' where id = '${ids.w2}'`));
+await denied("can't use someone else's photo", () => as('w2', 'aal1', `update profiles set avatar_url = 'https://abc.supabase.co/storage/v1/object/public/avatars/${ids.w1}/a.webp' where id = '${ids.w2}'`));
+await ok('own uploaded photo and theme accepted', async () => { await as('w2', 'aal1', `update profiles set avatar_url = 'https://abc.supabase.co/storage/v1/object/public/avatars/${ids.w2}/a.webp', theme = 'jacaranda', languages = '{English,isiZulu}', availability = '{sat,sun,evenings}', experience = '[{"role":"Waiter","place":"Ocean Basket","years":"2"}]' where id = '${ids.w2}'`); return (await db.query(`select theme from profiles where id=$1`, [ids.w2])).rows[0].theme; });
+await denied('unknown theme rejected', () => as('w2', 'aal1', `update profiles set theme = 'hacker' where id = '${ids.w2}'`));
+await denied('bad availability value rejected', () => as('w2', 'aal1', `update profiles set availability = '{always}' where id = '${ids.w2}'`));
+await denied('worker cannot upload a photo into another folder', () => as('w2', 'aal1', `insert into storage.objects (bucket_id, name) values ('avatars', '${ids.w1}/x.webp')`));
+await ok('worker uploads own photo', async () => (await as('w2', 'aal1', `insert into storage.objects (bucket_id, name) values ('avatars', '${ids.w2}/a.webp') returning name`)).rows[0].name);
+await ok('visitors who are not signed in get no profile card', async () => { const r = (await as('anon', null, `select profile_card('${ids.w1}') c`).catch(e => ({rows: [{c: 'denied'}]}))).rows[0].c; if (r && r !== 'denied') throw new Error('leak'); return r ?? 'null'; });
+await ok('signed-in user sees a card without the phone number', async () => { const c = (await as('d', 'aal1', `select profile_card('${ids.w1}') c`)).rows[0].c; if (c.phone || c.resume_path) throw new Error('leak'); return `${c.full_name}, ${c.shifts_completed} done`; });
+await ok('people booked together see the phone number', async () => { await db.query(`update profiles set phone = '082 000 0000' where id = $1`, [ids.w1]); const c = (await as('biz', 'aal1', `select profile_card('${ids.w1}') c`)).rows[0].c; if (!c.phone) throw new Error('missing'); return c.phone; });
+await ok('suspended profiles are hidden from others', async () => { const c = (await as('w1', 'aal1', `select profile_card('${ids.w2}') c`)).rows[0].c; if (c) throw new Error('shown'); return 'hidden'; });
+await ok('shift board shows the business photo and theme', async () => Object.keys((await as('anon', null, `select * from open_shifts(null, null, 2000)`)).rows[0] || {}).filter(k => k.startsWith('business')).join());
+await ok('my dashboard summary', async () => JSON.stringify((await as('w1', 'aal1', `select my_summary() s`)).rows[0].s.business));
 
 console.log(`\n${pass} passed, ${fail} failed`);
