@@ -169,15 +169,20 @@ function Dashboard({sb, profile, email, staff, reload}: {sb: SupabaseClient; pro
   const setTab = (t: string) => { setTabState(t); const u = new URL(location.href); u.searchParams.set('tab', t); history.replaceState(null, '', u); };
   useEffect(() => { if (!tabs.some(x => x[0] === tab)) setTab('overview'); }, [mode]);
 
-  async function switchMode(next: Mode) {
+  // One mode at a time: switching swaps the whole dashboard, settings and payments to that mode.
+  const [askBiz, setAskBiz] = useState(false), [bizName, setBizName] = useState(profile.business_name || '');
+  async function switchMode(next: Mode, businessName?: string) {
     if (next === mode) return;
-    const enabled = next === 'worker' ? m.work : m.hire;
-    if (!enabled) { setTab('settings'); return; }
+    if (next === 'business' && !(businessName || profile.business_name || '').trim()) { setAskBiz(true); return; }
     setSwitching(true); setErr('');
-    const {error} = await sb.from('profiles').update({active_mode: next}).eq('id', profile.id);
+    const patch: Record<string, unknown> = {active_mode: next};
+    if (businessName) patch.business_name = businessName.trim();
+    const {error} = await sb.from('profiles').update(patch).eq('id', profile.id);
     setSwitching(false);
     if (error) return setErr(error.message);
-    setTabState('overview'); reload();
+    setAskBiz(false); setTabState('overview');
+    const u = new URL(location.href); u.searchParams.delete('tab'); history.replaceState(null, '', u);
+    window.scrollTo({top: 0}); reload();
   }
   const name = mode === 'business' ? profile.business_name || profile.full_name : profile.full_name || profile.business_name;
 
@@ -194,10 +199,10 @@ function Dashboard({sb, profile, email, staff, reload}: {sb: SupabaseClient; pro
           </div>
           <div className="mode-switch" role="tablist" aria-label="Account mode">
             <button role="tab" aria-selected={mode === 'worker'} className={mode === 'worker' ? 'on' : ''} onClick={() => switchMode('worker')} disabled={switching}>
-              <Sparkles size={16}/>Working{!m.work && <small>Off</small>}
+              <Sparkles size={16}/>Working
             </button>
             <button role="tab" aria-selected={mode === 'business'} className={mode === 'business' ? 'on' : ''} onClick={() => switchMode('business')} disabled={switching}>
-              <Building2 size={16}/>Hiring{!m.hire && <small>Off</small>}
+              <Building2 size={16}/>Hiring
             </button>
           </div>
         </div>
@@ -209,6 +214,15 @@ function Dashboard({sb, profile, email, staff, reload}: {sb: SupabaseClient; pro
       </section>
       {err && <Notice kind="error">{err}</Notice>}
       {profile.suspended && <Suspended sb={sb} profile={profile}/>}
+      {askBiz && (
+        <Sheet title="Switch to Hiring" onClose={() => setAskBiz(false)}>
+          <form className="form" onSubmit={e => { e.preventDefault(); if (bizName.trim().length >= 2) switchMode('business', bizName); }}>
+            <p className="muted">Hiring mode gives you the business dashboard: post shifts, book workers and pay through escrow. You can switch back to Working any time.</p>
+            <label className="field">Business name (shown to workers)<input value={bizName} onChange={e => setBizName(e.target.value)} minLength={2} maxLength={120} required autoFocus placeholder="e.g. Thandi’s Kitchen, or your own name"/></label>
+            <button className="btn btn-primary btn-block themed" disabled={switching}>{switching ? <LoaderCircle className="spin" size={18}/> : <Building2 size={18}/>}Switch to Hiring</button>
+          </form>
+        </Sheet>
+      )}
 
       <nav className="dash-tabs" role="tablist">
         {tabs.map(([k, label, Icon]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}><Icon size={17}/><span>{label}</span></button>)}
@@ -221,7 +235,7 @@ function Dashboard({sb, profile, email, staff, reload}: {sb: SupabaseClient; pro
         {tab === 'payouts' && <Payouts sb={sb} profile={profile} onSaved={reload}/>}
         {tab === 'post' && <PostShift sb={sb} profile={profile} onPosted={() => setTab('shifts')}/>}
         {tab === 'shifts' && <BusinessShifts sb={sb} profile={profile}/>}
-        {tab === 'settings' && <AccountSettings sb={sb} profile={profile} email={email} reload={reload}/>}
+        {tab === 'settings' && <AccountSettings sb={sb} profile={profile} email={email} mode={mode} onSwitch={() => switchMode(mode === 'business' ? 'worker' : 'business')} go={setTab}/>}
       </div>
     </div>
   );
@@ -320,53 +334,48 @@ function BusinessOverview({sb, profile, go}: {sb: SupabaseClient; profile: Profi
   );
 }
 
-function Toggle({on, onChange, disabled}: {on: boolean; onChange: (v: boolean) => void; disabled?: boolean}) {
-  return <button type="button" role="switch" aria-checked={on} className={'toggle' + (on ? ' on' : '')} onClick={() => onChange(!on)} disabled={disabled}><i/></button>;
-}
-
-function AccountSettings({sb, profile, email, reload}: {sb: SupabaseClient; profile: Profile; email: string; reload: () => void}) {
-  const m = modes(profile);
-  const [bizName, setBizName] = useState(profile.business_name || ''), [askBiz, setAskBiz] = useState(false);
-  const [msg, setMsg] = useState<{kind: 'error' | 'ok'; text: string} | null>(null), [busy, setBusy] = useState(false);
-  async function update(patch: Record<string, unknown>, ok: string) {
-    setBusy(true); setMsg(null);
-    const {error} = await sb.from('profiles').update(patch).eq('id', profile.id);
-    setBusy(false);
-    if (error) return setMsg({kind: 'error', text: /column|schema cache/.test(error.message) ? 'Ask Community Work to finish the latest update, then try again.' : error.message});
-    setMsg({kind: 'ok', text: ok}); reload();
-  }
-  const setWork = (v: boolean) => {
-    if (!v && !m.hire) return setMsg({kind: 'error', text: 'Keep at least one mode switched on.'});
-    update(v ? {can_work: true} : {can_work: false, active_mode: 'business'}, v ? 'Working is on. Switch to it at the top of your dashboard.' : 'Working is off.');
-  };
-  const setHire = (v: boolean) => {
-    if (!v && !m.work) return setMsg({kind: 'error', text: 'Keep at least one mode switched on.'});
-    if (v && !bizName.trim()) { setAskBiz(true); return; }
-    update(v ? {can_hire: true, business_name: bizName.trim()} : {can_hire: false, active_mode: 'worker'}, v ? 'Hiring is on. Switch to it at the top of your dashboard.' : 'Hiring is off.');
-  };
+function AccountSettings({sb, profile, email, mode, onSwitch, go}: {sb: SupabaseClient; profile: Profile; email: string; mode: Mode; onSwitch: () => void; go: (t: string) => void}) {
+  const [msg, setMsg] = useState<{kind: 'error' | 'ok'; text: string} | null>(null);
+  const [fee, setFee] = useState<number | null>(null);
+  useEffect(() => { sb.rpc('public_settings').then(({data}) => data && setFee((data as any).platform_fee_percent)); }, []);
+  const hiring = mode === 'business';
   return (
     <div className="split">
       <div className="stack">
         <section className="card-panel section-card">
-          <header className="sec-head"><Repeat size={18}/><div><h2>One account, two modes</h2><p>Switch on both to pick up shifts and hire people with the same login. Each mode has its own dashboard.</p></div></header>
+          <header className="sec-head">{hiring ? <Building2 size={18}/> : <Sparkles size={18}/>}<div><h2>You’re in {hiring ? 'Hiring' : 'Working'} mode</h2><p>One mode at a time. Your dashboard, settings and payments all follow the mode you’re in.</p></div></header>
           <div className="mode-row">
-            <span className="mode-ic"><Sparkles size={20}/></span>
-            <div><strong>Working</strong><small>Pick up paid shifts, get paid to your bank, build your worker profile.</small></div>
-            <Toggle on={m.work} onChange={setWork} disabled={busy}/>
+            <span className="mode-ic">{hiring ? <Sparkles size={20}/> : <Building2 size={20}/>}</span>
+            <div><strong>{hiring ? 'Want to pick up shifts?' : 'Need to hire people?'}</strong><small>{hiring ? 'Switch to Working to find shifts, get paid to your bank and use your worker profile.' : 'Switch to Hiring to post shifts, book workers and pay through escrow. Same login.'}</small></div>
+            <button className="btn btn-primary btn-sm themed" onClick={onSwitch}><Repeat size={15}/>Switch to {hiring ? 'Working' : 'Hiring'}</button>
           </div>
-          <div className="mode-row">
-            <span className="mode-ic"><Building2 size={20}/></span>
-            <div><strong>Hiring</strong><small>Post shifts with an hourly rate, book workers and pay through escrow.</small></div>
-            <Toggle on={m.hire} onChange={setHire} disabled={busy}/>
-          </div>
-          {askBiz && (
-            <form className="inline-form" onSubmit={e => { e.preventDefault(); if (bizName.trim().length >= 2) { setAskBiz(false); setHire(true); } }}>
-              <label className="field">Business name (shown to workers)<input value={bizName} onChange={e => setBizName(e.target.value)} minLength={2} maxLength={120} required autoFocus placeholder="e.g. Thandi’s Kitchen or your own name"/></label>
-              <div className="row-gap start"><button className="btn btn-primary btn-sm themed">Turn on hiring</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => setAskBiz(false)}>Cancel</button></div>
-            </form>
-          )}
-          {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
         </section>
+
+        {hiring ? (
+          <section className="card-panel section-card">
+            <header className="sec-head"><Wallet size={18}/><div><h2>Paying workers</h2><p>How money moves when you book someone.</p></div></header>
+            <dl className="pv-facts">
+              <dt><ShieldCheck size={15}/>Escrow shifts</dt><dd>You pay the shift amount{fee != null ? ` plus a ${fee}% service fee` : ''} into TradeSafe escrow when a worker picks it up. It’s released to them after you confirm the hours.</dd>
+              <dt><Banknote size={15}/>Cash shifts</dt><dd>You pay the worker in person and mark it paid in your Shifts tab.</dd>
+              <dt><FileText size={15}/>Your details</dt><dd>TradeSafe asks for your name, ID number and mobile once, at your first escrow payment (South African FICA rules).</dd>
+            </dl>
+            <div className="row-gap start"><button className="btn btn-outline btn-sm" onClick={() => go('shifts')}>Go to my shifts</button><button className="btn btn-ghost btn-sm" onClick={() => go('profile')}>Edit business details</button></div>
+          </section>
+        ) : (
+          <section className="card-panel section-card">
+            <header className="sec-head"><Wallet size={18}/><div><h2>Getting paid</h2><p>Escrow shift pay goes straight to your bank account.</p></div></header>
+            <div className="mode-row">
+              <span className="mode-ic">{profile.payout_ready ? <CheckCircle2 size={20}/> : <Wallet size={20}/>}</span>
+              <div><strong>{profile.payout_ready ? 'Bank account added' : 'No bank account yet'}</strong><small>{profile.payout_ready ? 'You can be paid for escrow shifts.' : 'Add it before your first escrow shift so you can be paid.'}</small></div>
+              <button className="btn btn-outline btn-sm" onClick={() => go('payouts')}>{profile.payout_ready ? 'Change' : 'Add bank details'}</button>
+            </div>
+            <div className="mode-row">
+              <span className="mode-ic"><ShieldCheck size={20}/></span>
+              <div><strong>Reliability: {profile.strikes ?? 0} strike{profile.strikes === 1 ? '' : 's'}</strong><small>Cancelling a shift you picked up, or not showing up, adds a strike. 3 strikes pauses your account until an appeal is approved.</small></div>
+            </div>
+          </section>
+        )}
+
         <TwoStepCard sb={sb}/>
         <section className="card-panel section-card">
           <header className="sec-head"><KeyRound size={18}/><div><h2>Sign-in</h2><p>{email}</p></div></header>
@@ -378,6 +387,7 @@ function AccountSettings({sb, profile, email, reload}: {sb: SupabaseClient; prof
             if (!error) (e.target as HTMLFormElement).reset();
           }}>
             <label className="field">New password<input name="password" type="password" minLength={10} required autoComplete="new-password"/><small>At least 10 characters.</small></label>
+            {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
             <button className="btn btn-outline btn-sm">Change password</button>
           </form>
         </section>
@@ -385,7 +395,9 @@ function AccountSettings({sb, profile, email, reload}: {sb: SupabaseClient; prof
       <aside className="tips">
         <ShieldCheck size={22}/>
         <h2>Your privacy</h2>
-        <p className="muted">Your profile is visible to signed-in members. Your phone number is only shown to people you’re booked with, and your CV only to businesses whose shifts you pick up.</p>
+        <p className="muted">{hiring
+          ? 'Your business profile is visible to signed-in members. Workers who pick up your shifts see your phone number and the exact address.'
+          : 'Your profile is visible to signed-in members. Your phone number is only shown to people you’re booked with, and your CV only to businesses whose shifts you pick up.'}</p>
         <a className="link" href="privacy.html">Privacy details <ArrowRight size={15}/></a>
       </aside>
     </div>
@@ -812,7 +824,7 @@ export function ShiftsPage() {
 
   const blocked = !acct.profile ? null
     : acct.profile.suspended ? <Notice kind="error">Your account is paused, so you can’t pick up shifts. <a className="link" href="account.html">Send an appeal</a></Notice>
-    : !m?.work ? <Notice>Switch on <strong>Working</strong> in your <a className="link" href="account.html?tab=settings">account settings</a> to pick up shifts with this account.</Notice>
+    : m?.active === 'business' ? <Notice>You’re in <strong>Hiring</strong> mode. <button className="link" onClick={async () => { await acct.sb!.from('profiles').update({active_mode: 'worker'}).eq('id', acct.profile!.id); acct.reload(); }}>Switch to Working</button> to pick up shifts.</Notice>
     : null;
 
   return (
