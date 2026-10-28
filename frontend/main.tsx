@@ -342,7 +342,7 @@ function About() {
 const faqs: [string, string][] = [
   ['How does the app find my area?', 'When you open it, the app asks your phone or browser for your location. If that’s blocked, slow or outside South Africa, it estimates your area from your network. You can always tap your area at the top to choose a city or search an address.'],
   ['My location isn’t working.', 'Allow location for this site or app in your phone settings, then tap “Use my current location”. Or just tap your city — that works without GPS.'],
-  ['Where do the online and in-person jobs come from?', 'Besides community posts, listings come from public job boards such as Remotive, Jobicy, Himalayas, Remote OK, Working Nomads and We Work Remotely. Tap Apply to open the original advert and apply there. Listings refresh several times a day.'],
+  ['Where do the online and in-person jobs come from?', 'Besides shifts posted here, in-person jobs come straight from South African employers’ own careers pages, and online jobs from public job boards such as Remotive, Jobicy, Himalayas, Remote OK, Working Nomads and We Work Remotely. Tap Apply to open the original advert and apply there. Listings refresh several times a day.'],
   ['How do I make a CV?', 'Open CV builder from the menu. Fill in your details, choose a template and colour, then download a PDF or Word file. Everything stays on your device, and you can export a save file to keep editing later.'],
   ['Why am I seeing no jobs?', 'Your filters may be too narrow. Choose “Anywhere in SA”, clear the category or search, and check the In person and Online tabs.'],
   ['How is distance calculated?', 'It’s the straight-line distance between your area and the workplace. Travel by road will be longer.'],
@@ -391,7 +391,7 @@ function Privacy() {
         <h2>Usage statistics</h2>
         <p>We count page views and clicks on jobs and sponsored links to improve the service and report to partners. These records use a random code stored on your device, not your name, and are kept for up to 13 months. If you accept analytics cookies, Google Analytics also measures visits; you can say no and everything still works.</p>
         <h2>Listings from other job boards</h2>
-        <p>In-person and online listings come from public job boards (such as Remotive, Jobicy, Himalayas, Remote OK, Working Nomads and We Work Remotely). When you tap Apply you leave this app, and that site’s own privacy policy applies.</p>
+        <p>In-person listings come from employers’ own careers pages, and online listings from public job boards (such as Remotive, Jobicy, Himalayas, Remote OK, Working Nomads and We Work Remotely). When you tap Apply you leave this app, and that site’s own privacy policy applies.</p>
         <h2>CV builder</h2>
         <p>What you type into the CV builder stays in this browser on your device. Your PDF or Word file is created on your device too; nothing is uploaded.</p>
         <h2>Advertising</h2>

@@ -249,4 +249,6 @@ await ok('the shift board uses the business logo, not a personal photo', async (
 
 await ok('one worker on several shifts counts as one worker', async () => { const sum = (await as('biz', 'aal1', `select my_summary() s`)).rows[0].s.business; const card = (await as('w1', 'aal1', `select profile_card('${ids.biz}', 'business') c`)).rows[0].c; const people = (await db.query(`select count(distinct a.worker_id)::int n from applications a join shifts s on s.id = a.shift_id where s.business_id = $1 and a.status in ('accepted','completed')`, [ids.biz])).rows[0].n; if (sum.hired_total !== people || card.workers_hired !== people) throw new Error(JSON.stringify({sum, card: card.workers_hired, people})); return `${people} people, ${card.shifts_filled} bookings`; });
 
+await ok("a business never sees its own shifts on the board", async () => { const own = (await as('biz', 'aal1', `select count(*)::int n from open_shifts(null, null, 2000) where business_id = '${ids.biz}'`)).rows[0].n; const others = (await as('d', 'aal1', `select count(*)::int n from open_shifts(null, null, 2000) where business_id = '${ids.biz}'`)).rows[0].n; if (own !== 0 || !others) throw new Error(`${own} / ${others}`); return `0 own, ${others} for others`; });
+
 console.log(`\n${pass} passed, ${fail} failed`);

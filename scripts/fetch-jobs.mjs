@@ -6,7 +6,7 @@
 // so the collection grows and stays fresh even with small API allowances.
 //
 // Sources (all optional — one failing never empties the app):
-//   In person, South Africa:  Jooble (JOOBLE_API_KEY secret)
+//   In person, South Africa:  employers' own hiring-system feeds (scripts/ats.mjs, no key), Jooble (JOOBLE_API_KEY secret)
 //   Online, open to SA:       Remotive, Jobicy, Himalayas, Remote OK, Working Nomads, We Work Remotely
 //
 // Output (OUT_DIR, default jobs-data/jobs):
@@ -19,6 +19,7 @@
 
 import {readFile, writeFile, mkdir, readdir, rm} from 'node:fs/promises';
 import {placeFor} from './sa-places.mjs';
+import {atsJobs} from './ats.mjs';
 
 const OUT = process.env.OUT_DIR || 'jobs-data/jobs';
 const UA = 'CommunityWorkSA/1.0 (+https://github.com/Zayaiken21/South-Africa-Community-Work)';
@@ -290,6 +291,8 @@ async function weWorkRemotely() {
 }
 
 const sources = [
+  {name: 'Employer sites', url: 'https://zayaiken21.github.io/South-Africa-Community-Work/how-it-works.html',
+    run: st => atsJobs(st, {isSouthAfrican, located, categorize, strip, excerpt, iso})},
   {name: 'Jooble', url: 'https://za.jooble.org', run: jooble},
   {name: 'Remotive', url: 'https://remotive.com', run: remotive},
   {name: 'Jobicy', url: 'https://jobicy.com', run: jobicy},
@@ -344,7 +347,9 @@ let jobs = [...all.values()]
   .filter(j => j.source !== 'Adzuna')
   .filter(j => j.source !== 'Jooble' || (j.location !== 'South Africa (remote)' && isSouthAfrican(j.location)))
   .map(j => ({...j, category: fields.includes(j.category) ? j.category : categorize(j.title)}))
-  .filter(j => now - Date.parse(j.posted) < KEEP_DAYS[j.mode === 'remote' ? 'remote' : 'onsite'] * 864e5)
+  .filter(j => j.source === 'Employer sites'
+    ? now - Date.parse(j.seenAt || j.posted) < 2 * 864e5
+    : now - Date.parse(j.posted) < KEEP_DAYS[j.mode === 'remote' ? 'remote' : 'onsite'] * 864e5)
   .sort((a, b) => Date.parse(b.posted) - Date.parse(a.posted))
   .filter(j => { const k = `${j.title}|${j.company}|${j.mode === 'onsite' ? j.location : ''}`.toLowerCase().replace(/\s+/g, ' '); if (seen.has(k)) return false; seen.add(k); return true; })
   .map(j => Object.fromEntries(Object.entries(j).filter(([, v]) => v !== undefined && v !== null && v !== '')));
