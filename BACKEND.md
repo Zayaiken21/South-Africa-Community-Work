@@ -9,6 +9,15 @@ Do these steps once, in order. Nothing here needs a terminal except step 5.
 2. Paste the whole file `supabase/migrations/20261028000000_marketplace.sql` and press **Run**.
    It creates the tables, security rules, the private `resumes` storage bucket and the dashboard functions.
 
+### Updates (run each once, in this order, after the file above)
+
+| File | What it adds |
+|---|---|
+| `supabase/migrations/20261028120000_shift_pickup_strikes.sql` | Workers pick up shifts themselves, strikes, suspension and appeals |
+| `supabase/migrations/20261028140000_dual_accounts_profiles.sql` | One account for working and hiring, profile photos, themes, detailed profiles |
+
+They keep all existing data. `supabase/repair-accounts.sql` fixes logins created before the database was set up.
+
 ## 2. Sign-in settings
 
 Supabase → **Authentication**:

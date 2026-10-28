@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import JobsView, {LocationPicker, Sheet, useAreaLocation} from './JobsView';
 import {AccountPage, AdminPage, ConsentBanner, ShiftsPage} from './marketplace';
+import {Avatar, ProfilePage} from './profile';
+import {modes} from './backend';
 import {useAccount} from './backend';
 import {consent, gaConfigured, startTracking} from './analytics';
 import {API, money, savedJobs, setSavedJobs, toggleSaved, type CommunityJob, type SavedJob} from './catalog';
@@ -33,7 +35,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // Ads stay off account, admin, legal and offline pages.
-const adFreePages = ['post-job.html', 'account.html', 'admin.html', 'privacy.html', 'terms.html', 'offline.html', '404.html'];
+const adFreePages = ['post-job.html', 'account.html', 'admin.html', 'profile.html', 'privacy.html', 'terms.html', 'offline.html', '404.html'];
 if (!adFreePages.includes(file)) initAds();
 if (file !== 'admin.html') startTracking();
 
@@ -52,7 +54,7 @@ function App() {
   const banner = useConsentBanner();
   const signedIn = !!acct.session;
   const tab = file === 'index.html' ? 'home' : file === 'find-work.html' ? (mode === 'remote' ? 'online' : 'jobs') : file === 'shifts.html' ? 'shifts'
-    : file === 'saved-jobs.html' ? 'saved' : file === 'account.html' || file === 'admin.html' || file === 'post-job.html' ? 'account' : 'more';
+    : file === 'saved-jobs.html' ? 'saved' : file === 'account.html' || file === 'admin.html' || file === 'post-job.html' || file === 'profile.html' ? 'account' : 'more';
   return (
     <>
       <header className="topbar">
@@ -70,7 +72,10 @@ function App() {
         <div className="top-actions">
           {install && <button className="btn btn-outline btn-sm hide-sm" onClick={install}><Download size={16}/>Install app</button>}
           {signedIn
-            ? <a className="btn btn-primary btn-sm hide-sm" href="account.html"><UserRound size={16}/>My account</a>
+            ? <a className="account-chip hide-sm" href="account.html" title="My account">
+                <Avatar url={acct.profile?.avatar_url} name={acct.profile?.full_name || acct.profile?.business_name} size={34} themeId={acct.profile?.theme}/>
+                <span>{acct.profile && modes(acct.profile).active === 'business' ? 'Hiring' : 'Working'}</span>
+              </a>
             : <><a className="btn btn-outline btn-sm hide-sm" href="account.html">Sign in</a><a className="btn btn-primary btn-sm hide-sm" href="account.html?signup=1&type=business"><Building2 size={16}/>Hire workers</a></>}
           <button className="icon-btn show-sm" aria-label="More" onClick={() => setMore(true)}><Menu size={22}/></button>
         </div>
@@ -83,6 +88,7 @@ function App() {
           : file === 'shifts.html' ? <ShiftsPage/>
           : file === 'account.html' ? <AccountPage/>
           : file === 'admin.html' ? <AdminPage/>
+          : file === 'profile.html' ? <ProfilePage/>
           : file === 'job.html' ? <Detail/>
           : file === 'saved-jobs.html' ? <Saved/>
           : file === 'how-it-works.html' ? <How/>
@@ -371,6 +377,8 @@ function Privacy() {
         <p>When you open the app it asks your device for your location to show nearby jobs. If location is blocked or unavailable, it estimates your area from your internet connection using GeoJS or ipapi. Your chosen area is saved on this device. Searches send coordinates to our jobs service to calculate distances. We don’t keep a history of your location.</p>
         <h2>Your account</h2>
         <p>When you create an account we store your email, name, account type and anything you add to your profile: headline, description, skills, phone, city and province. Businesses also store their business name and, optionally, registration number. Accounts are hosted by Supabase. Passwords are stored hashed; we never see them.</p>
+        <h2>Your profile page</h2>
+        <p>Your profile page (photo, name, headline, description, skills, experience, availability, languages, area and shifts completed) is visible to signed-in Community Work members. Your phone number is shown only to people you’re booked with. Profile photos are stored as public images so they can load quickly; don’t upload anything you wouldn’t show on a public profile. Suspended accounts are hidden.</p>
         <h2>Your CV</h2>
         <p>A CV you upload is stored privately. Only you, businesses whose shifts you apply to, and our support team can open it, through links that expire after two minutes. Replacing or removing it deletes the old file.</p>
         <h2>Shifts and applications</h2>

@@ -1,10 +1,13 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {
-  UserRound, Building2, LogOut, LoaderCircle, Check, X, Plus, MapPin, Clock, ShieldCheck, FileUp, FileText, Trash2, Wallet,
+  UserRound, Building2, LogOut, LoaderCircle, Check, X, Plus, MapPin, Clock, ShieldCheck, FileText, Wallet,
   CalendarDays, Users, BadgeCheck, Search, BarChart3, Activity, KeyRound, ArrowUpRight, Banknote, Lock, RefreshCw, Briefcase, Eye,
+  LayoutDashboard, Settings, Sparkles, Palette, Globe, ArrowRight, CheckCircle2, Repeat, Ban, Zap, AlertTriangle, Gavel, TrendingUp, MousePointerClick,
 } from 'lucide-react';
-import {useAccount, callFunction, errorText, type Profile} from './backend';
+import {useAccount, callFunction, errorText, modes, type Profile} from './backend';
+import {Avatar, ProfileEditor} from './profile';
+import {themeStyle} from './themes';
 import {track} from './analytics';
 import {LocationPicker, Sheet, useAreaLocation} from './JobsView';
 import {browseCategories, money, type Location} from './catalog';
@@ -145,139 +148,271 @@ function NewPassword({sb}: {sb: SupabaseClient}) {
   );
 }
 
+type Mode = 'worker' | 'business';
+type TabDef = [string, string, React.ComponentType<{size?: number}>];
+const WORK_TABS: TabDef[] = [['overview', 'Overview', LayoutDashboard], ['bookings', 'My shifts', CalendarDays], ['profile', 'Profile', UserRound], ['payouts', 'Get paid', Wallet], ['settings', 'Settings', Settings]];
+const HIRE_TABS: TabDef[] = [['overview', 'Overview', LayoutDashboard], ['shifts', 'Shifts', Briefcase], ['post', 'Post a shift', Plus], ['profile', 'Profile', Building2], ['settings', 'Settings', Settings]];
+
 function Dashboard({sb, profile, email, staff, reload}: {sb: SupabaseClient; profile: Profile; email: string; staff: 'ceo' | 'admin' | null; reload: () => void}) {
-  const business = profile.account_type === 'business';
-  const tabs = business
-    ? [['shifts', 'My shifts'], ['post', 'Post a shift'], ['profile', 'Business profile']] as const
-    : [['profile', 'Profile'], ['bookings', 'My shifts'], ['payouts', 'Get paid']] as const;
-  const [tab, setTab] = useState<string>(params.get('tab') || tabs[0][0]);
+  const m = modes(profile);
+  const mode: Mode = m.active;
+  const tabs = mode === 'business' ? HIRE_TABS : WORK_TABS;
+  const [tab, setTabState] = useState<string>(() => { const t = params.get('tab'); return t && tabs.some(x => x[0] === t) ? t : 'overview'; });
+  const [switching, setSwitching] = useState(false), [err, setErr] = useState('');
+  const setTab = (t: string) => { setTabState(t); const u = new URL(location.href); u.searchParams.set('tab', t); history.replaceState(null, '', u); };
+  useEffect(() => { if (!tabs.some(x => x[0] === tab)) setTab('overview'); }, [mode]);
+
+  async function switchMode(next: Mode) {
+    if (next === mode) return;
+    const enabled = next === 'worker' ? m.work : m.hire;
+    if (!enabled) { setTab('settings'); return; }
+    setSwitching(true); setErr('');
+    const {error} = await sb.from('profiles').update({active_mode: next}).eq('id', profile.id);
+    setSwitching(false);
+    if (error) return setErr(error.message);
+    setTabState('overview'); reload();
+  }
+  const name = mode === 'business' ? profile.business_name || profile.full_name : profile.full_name || profile.business_name;
+
   return (
-    <div className="page">
-      <div className="account-head">
-        <span className={'avatar big ' + (business ? 'onsite' : '')}>{(profile.business_name || profile.full_name || email).slice(0, 2).toUpperCase()}</span>
-        <div>
-          <h1>{business ? profile.business_name || profile.full_name : profile.full_name || 'Your account'}</h1>
-          <p className="muted">{email} · {business ? 'Business' : 'Worker'}{profile.verified && <> · <BadgeCheck size={14}/> Verified</>}</p>
+    <div className="page dash" style={themeStyle(profile.theme)}>
+      <section className="dash-hero">
+        <div className="dash-hero-bg"><span/></div>
+        <div className="dash-hero-row">
+          <a href={'profile.html?id=' + profile.id} className="dash-avatar" aria-label="View my profile"><Avatar url={profile.avatar_url} name={name} size={84} themeId={profile.theme} ring/></a>
+          <div className="dash-id">
+            <p className="dash-hello">{greeting()}{profile.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}</p>
+            <h1>{name || 'Your account'}{profile.verified && <BadgeCheck size={22} className="pv-check"/>}</h1>
+            <p className="dash-sub">{email}</p>
+          </div>
+          <div className="mode-switch" role="tablist" aria-label="Account mode">
+            <button role="tab" aria-selected={mode === 'worker'} className={mode === 'worker' ? 'on' : ''} onClick={() => switchMode('worker')} disabled={switching}>
+              <Sparkles size={16}/>Working{!m.work && <small>Off</small>}
+            </button>
+            <button role="tab" aria-selected={mode === 'business'} className={mode === 'business' ? 'on' : ''} onClick={() => switchMode('business')} disabled={switching}>
+              <Building2 size={16}/>Hiring{!m.hire && <small>Off</small>}
+            </button>
+          </div>
         </div>
-        <div className="row-gap end">
-          {staff && <a className="btn btn-dark btn-sm" href="admin.html"><ShieldCheck size={16}/>{staff === 'ceo' ? 'CEO dashboard' : 'Admin'}</a>}
-          <button className="btn btn-outline btn-sm" onClick={() => sb.auth.signOut().then(reload)}><LogOut size={16}/>Sign out</button>
+        <div className="dash-actions">
+          <a className="chip-link" href={'profile.html?id=' + profile.id}><Eye size={15}/>View profile</a>
+          {staff && <a className="chip-link strong" href="admin.html"><ShieldCheck size={15}/>{staff === 'ceo' ? 'CEO dashboard' : 'Admin dashboard'}</a>}
+          <button className="chip-link" onClick={() => sb.auth.signOut().then(reload)}><LogOut size={15}/>Sign out</button>
         </div>
+      </section>
+      {err && <Notice kind="error">{err}</Notice>}
+      {profile.suspended && <Suspended sb={sb} profile={profile}/>}
+
+      <nav className="dash-tabs" role="tablist">
+        {tabs.map(([k, label, Icon]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}><Icon size={17}/><span>{label}</span></button>)}
+      </nav>
+
+      <div className="dash-body" key={mode + tab}>
+        {tab === 'overview' && (mode === 'business' ? <BusinessOverview sb={sb} profile={profile} go={setTab}/> : <WorkerOverview sb={sb} profile={profile} go={setTab}/>)}
+        {tab === 'profile' && <ProfileEditor sb={sb} profile={profile} onSaved={reload} mode={mode}/>}
+        {tab === 'bookings' && <WorkerBookings sb={sb} profile={profile}/>}
+        {tab === 'payouts' && <Payouts sb={sb} profile={profile} onSaved={reload}/>}
+        {tab === 'post' && <PostShift sb={sb} profile={profile} onPosted={() => setTab('shifts')}/>}
+        {tab === 'shifts' && <BusinessShifts sb={sb} profile={profile}/>}
+        {tab === 'settings' && <AccountSettings sb={sb} profile={profile} email={email} reload={reload}/>}
       </div>
-      {profile.suspended && <Notice kind="error">This account is suspended. Contact support if you think this is a mistake.</Notice>}
-      <div className="segmented tabs" role="tablist">
-        {tabs.map(([k, label]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>)}
-      </div>
-      {tab === 'profile' && <ProfileEditor sb={sb} profile={profile} onSaved={reload}/>}
-      {tab === 'bookings' && <WorkerBookings sb={sb} profile={profile}/>}
-      {tab === 'payouts' && <Payouts sb={sb} profile={profile} onSaved={reload}/>}
-      {tab === 'post' && <PostShift sb={sb} profile={profile} onPosted={() => setTab('shifts')}/>}
-      {tab === 'shifts' && <BusinessShifts sb={sb} profile={profile}/>}
     </div>
   );
 }
 
-// ---------------------------------------------------------------- profile + CV
-const SKILL_IDEAS = ['Customer service', 'Cash handling', 'Cooking', 'Cleaning', 'Driving (Code 10)', 'Forklift', 'Security (PSIRA)', 'Sales', 'Admin', 'Excel', 'First aid', 'Waitering', 'Barista', 'Stock control', 'Childcare', 'Gardening', 'Painting', 'Construction'];
+function greeting() { const h = Number(new Date().toLocaleString('en-ZA', {timeZone: tz, hour: 'numeric', hour12: false})); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; }
 
-function ProfileEditor({sb, profile, onSaved}: {sb: SupabaseClient; profile: Profile; onSaved: () => void}) {
-  const [p, setP] = useState(profile);
-  const [skill, setSkill] = useState('');
-  const [busy, setBusy] = useState(false), [msg, setMsg] = useState<{kind: 'error' | 'ok'; text: string} | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const business = p.account_type === 'business';
-  const set = (k: keyof Profile, v: any) => setP(x => ({...x, [k]: v}));
-  const addSkill = (s: string) => { const v = s.trim().slice(0, 40); if (v && !p.skills.includes(v) && p.skills.length < 30) set('skills', [...p.skills, v]); setSkill(''); };
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault(); setBusy(true); setMsg(null);
-    const {error} = await sb.from('profiles').update({
-      full_name: p.full_name, headline: p.headline, bio: p.bio, skills: p.skills, phone: p.phone, city: p.city, province: p.province || null,
-      lat: p.lat, lon: p.lon, business_name: p.business_name, business_reg: p.business_reg,
-    }).eq('id', p.id);
-    setBusy(false);
-    setMsg(error ? {kind: 'error', text: error.message} : {kind: 'ok', text: 'Saved.'});
-    if (!error) onSaved();
-  }
-
-  async function upload(file: File) {
-    setMsg(null);
-    if (file.size > 5 * 1024 * 1024) return setMsg({kind: 'error', text: 'CV files can be up to 5 MB.'});
-    const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
-    if (!['pdf', 'doc', 'docx'].includes(ext)) return setMsg({kind: 'error', text: 'Upload a PDF or Word document.'});
-    setUploading(true);
-    const path = `${p.id}/cv-${Date.now()}.${ext}`;
-    const {error} = await sb.storage.from('resumes').upload(path, file, {contentType: file.type || undefined, upsert: false});
-    if (!error) {
-      if (p.resume_path) await sb.storage.from('resumes').remove([p.resume_path]);
-      await sb.from('profiles').update({resume_path: path}).eq('id', p.id);
-      set('resume_path', path);
-    }
-    setUploading(false);
-    setMsg(error ? {kind: 'error', text: error.message} : {kind: 'ok', text: 'CV saved to your account.'});
-  }
-  async function viewCv() {
-    if (!p.resume_path) return;
-    const {data} = await sb.storage.from('resumes').createSignedUrl(p.resume_path, 120);
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener');
-  }
-  async function removeCv() {
-    if (!p.resume_path) return;
-    await sb.storage.from('resumes').remove([p.resume_path]);
-    await sb.from('profiles').update({resume_path: null}).eq('id', p.id);
-    set('resume_path', null);
-  }
-
+function StatTile({icon: Icon, label, value, sub, tone}: {icon: React.ComponentType<{size?: number}>; label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: 'green' | 'blue' | 'amber' | 'red' | 'theme'}) {
   return (
-    <form className="split" onSubmit={save}>
-      <section className="card-panel form">
-        <h2 className="form-step">{business ? 'About your business' : 'About you'}</h2>
-        {business && <label className="field">Business name<input value={p.business_name || ''} onChange={e => set('business_name', e.target.value)} maxLength={120} required/></label>}
-        {business && <label className="field">Company registration number (optional)<input value={p.business_reg || ''} onChange={e => set('business_reg', e.target.value)} maxLength={40}/></label>}
-        <label className="field">{business ? 'Contact person' : 'Full name'}<input value={p.full_name || ''} onChange={e => set('full_name', e.target.value)} maxLength={120} required/></label>
-        {!business && <label className="field">Headline<input value={p.headline || ''} onChange={e => set('headline', e.target.value)} maxLength={120} placeholder="e.g. Reliable waiter with 3 years’ experience"/></label>}
-        <label className="field">{business ? 'What you do' : 'Short description of who you are'}
-          <textarea rows={5} value={p.bio || ''} onChange={e => set('bio', e.target.value)} maxLength={1000} placeholder={business ? 'Tell workers about your business and what a shift is like.' : 'Your experience, what you’re good at, when you can work.'}/>
-          <small>{(p.bio || '').length}/1000</small>
-        </label>
-        <div className="grid-2">
-          <label className="field">Phone / WhatsApp<input value={p.phone || ''} onChange={e => set('phone', e.target.value)} maxLength={30} inputMode="tel" placeholder="082 123 4567"/></label>
-          <label className="field">City or town<input value={p.city || ''} onChange={e => set('city', e.target.value)} maxLength={100}/></label>
-        </div>
-        <label className="field">Province
-          <select value={p.province || ''} onChange={e => set('province', e.target.value)}>
-            <option value="">Choose…</option>{PROVINCES.map(x => <option key={x}>{x}</option>)}
-          </select>
-        </label>
-        {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
-        <button className="btn btn-primary btn-block" disabled={busy}>{busy ? <LoaderCircle className="spin" size={18}/> : <Check size={18}/>}Save profile</button>
-      </section>
-      {!business && (
-        <aside className="card-panel form">
-          <h2 className="form-step">Skills</h2>
-          <div className="chip-wrap">
-            {p.skills.map(s => <button type="button" key={s} className="on" onClick={() => set('skills', p.skills.filter(x => x !== s))}>{s} <X size={13}/></button>)}
-          </div>
-          <div className="search-box">
-            <input value={skill} onChange={e => setSkill(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSkill(skill); } }} placeholder="Add a skill" maxLength={40}/>
-            <button type="button" className="btn btn-dark btn-sm" onClick={() => addSkill(skill)}>Add</button>
-          </div>
-          <div className="chip-wrap">{SKILL_IDEAS.filter(s => !p.skills.includes(s)).slice(0, 10).map(s => <button type="button" key={s} onClick={() => addSkill(s)}><Plus size={13}/>{s}</button>)}</div>
-          <h2 className="form-step">CV</h2>
-          {p.resume_path ? (
-            <div className="file-row"><FileText size={20}/><span>{p.resume_path.split('/').pop()}</span>
-              <button type="button" className="icon-btn" aria-label="View CV" onClick={viewCv}><Eye size={18}/></button>
-              <button type="button" className="icon-btn" aria-label="Remove CV" onClick={removeCv}><Trash2 size={18}/></button>
-            </div>
-          ) : <p className="muted">Businesses you apply to can open your CV. Nobody else can.</p>}
-          <label className="btn btn-outline btn-block upload">
-            {uploading ? <LoaderCircle className="spin" size={18}/> : <FileUp size={18}/>}{p.resume_path ? 'Replace CV' : 'Upload CV (PDF or Word)'}
-            <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden onChange={e => e.target.files?.[0] && upload(e.target.files[0])}/>
-          </label>
-          <a className="link" href="cv-builder.html">No CV yet? Build one free <ArrowUpRight size={14}/></a>
-        </aside>
+    <div className={'stat ' + (tone || '')}>
+      <span className="stat-icon"><Icon size={18}/></span>
+      <span className="stat-label">{label}</span>
+      <strong className="stat-value">{value}</strong>
+      {sub && <small className="stat-sub">{sub}</small>}
+    </div>
+  );
+}
+
+type Summary = {worker: {upcoming: number; completed: number; earned_zar: number; held_zar: number; hours: number; next: any},
+  business: {open: number; upcoming: number; booked: number; hired_total: number; held_zar: number; awaiting: number; spent_zar: number}};
+function useSummary(sb: SupabaseClient) {
+  const [s, setS] = useState<Summary | null>(null), [settings, setSettings] = useState<{strike_limit?: number; cancel_grace_minutes?: number; min_hourly_zar?: number}>({});
+  useEffect(() => {
+    sb.rpc('my_summary').then(({data}) => data && setS(data as Summary));
+    sb.rpc('public_settings').then(({data}) => data && setSettings(data as any));
+  }, []);
+  return {s, settings};
+}
+
+function Completeness({items, onFix}: {items: [string, boolean][]; onFix: () => void}) {
+  const score = Math.round(items.filter(i => i[1]).length / items.length * 100);
+  if (score === 100) return null;
+  return (
+    <section className="card-panel nudge">
+      <div className="ring" style={{'--p': score} as React.CSSProperties}><span>{score}%</span></div>
+      <div className="nudge-body">
+        <h3>Finish your profile</h3>
+        <p className="muted">Complete profiles get picked faster. Still to do: {items.filter(i => !i[1]).map(i => i[0]).join(', ')}.</p>
+      </div>
+      <button className="btn btn-primary btn-sm themed" onClick={onFix}>Complete profile <ArrowRight size={15}/></button>
+    </section>
+  );
+}
+
+function WorkerOverview({sb, profile, go}: {sb: SupabaseClient; profile: Profile; go: (t: string) => void}) {
+  const {s, settings} = useSummary(sb);
+  const w = s?.worker, limit = settings.strike_limit ?? 3, strikes = profile.strikes ?? 0;
+  return (
+    <div className="stack">
+      <div className="stat-grid">
+        <StatTile icon={CalendarDays} tone="theme" label="Upcoming shifts" value={w ? w.upcoming : '–'} sub={w?.next ? `Next: ${day(w.next.starts_at)}` : 'Nothing booked yet'}/>
+        <StatTile icon={CheckCircle2} tone="green" label="Shifts completed" value={w ? w.completed : '–'} sub={w ? `${Number(w.hours).toLocaleString('en-ZA')} hours worked` : ''}/>
+        <StatTile icon={Banknote} tone="blue" label="Earned" value={w ? money(w.earned_zar) : '–'} sub={w && w.held_zar ? `${money(w.held_zar)} held for you` : 'Paid to your bank'}/>
+        <StatTile icon={ShieldCheck} tone={strikes ? 'amber' : 'green'} label="Reliability" value={`${strikes}/${limit}`} sub={strikes ? 'strikes — cancelling adds one' : 'No strikes. Keep it up!'}/>
+      </div>
+      {w?.next && (
+        <section className="card-panel next-shift">
+          <span className="next-date"><b>{new Date(w.next.starts_at).toLocaleDateString('en-ZA', {timeZone: tz, day: 'numeric'})}</b>{new Date(w.next.starts_at).toLocaleDateString('en-ZA', {timeZone: tz, month: 'short'})}</span>
+          <div><p className="overline">Your next shift</p><h3>{w.next.title}</h3>
+            <p className="meta-line"><Clock size={15}/>{day(w.next.starts_at)} · {time(w.next.starts_at)}–{time(w.next.ends_at)} <MapPin size={15}/>{w.next.address ? `${w.next.address}, ` : ''}{w.next.city}</p></div>
+          <button className="btn btn-outline btn-sm" onClick={() => go('bookings')}>Details</button>
+        </section>
       )}
-    </form>
+      <Completeness onFix={() => go('profile')} items={[['photo', !!profile.avatar_url], ['headline', !!profile.headline], ['about you', (profile.bio || '').length >= 40], ['skills', profile.skills.length >= 3], ['availability', (profile.availability ?? []).length > 0], ['CV', !!profile.resume_path]]}/>
+      {!profile.payout_ready && <section className="card-panel nudge"><span className="nudge-icon"><Wallet size={22}/></span><div className="nudge-body"><h3>Set up how you get paid</h3><p className="muted">Escrow shifts pay straight into your bank account.</p></div><button className="btn btn-outline btn-sm" onClick={() => go('payouts')}>Add bank details</button></section>}
+      <div className="quick-grid">
+        <a className="quick" href="shifts.html"><span><Search size={20}/></span><strong>Find shifts</strong><small>Pick up paid work near you</small></a>
+        <button className="quick" onClick={() => go('profile')}><span><Palette size={20}/></span><strong>Style your profile</strong><small>Photo, theme and experience</small></button>
+        <a className="quick" href="cv-builder.html"><span><FileText size={20}/></span><strong>Build a CV</strong><small>Free PDF or Word</small></a>
+        <a className="quick" href="find-work.html?mode=remote"><span><Globe size={20}/></span><strong>Online jobs</strong><small>Work from home</small></a>
+      </div>
+    </div>
+  );
+}
+
+function BusinessOverview({sb, profile, go}: {sb: SupabaseClient; profile: Profile; go: (t: string) => void}) {
+  const {s} = useSummary(sb);
+  const b = s?.business;
+  return (
+    <div className="stack">
+      <div className="stat-grid">
+        <StatTile icon={Briefcase} tone="theme" label="Open shifts" value={b ? b.open : '–'} sub={b ? `${b.upcoming} upcoming in total` : ''}/>
+        <StatTile icon={Users} tone="green" label="Workers booked" value={b ? b.booked : '–'} sub={b ? `${b.hired_total} hired all-time` : ''}/>
+        <StatTile icon={ShieldCheck} tone="blue" label="Held in escrow" value={b ? money(b.held_zar) : '–'} sub="Released after each shift"/>
+        <StatTile icon={Banknote} tone={b?.awaiting ? 'amber' : 'green'} label="Spent on shifts" value={b ? money(b.spent_zar) : '–'} sub={b?.awaiting ? `${b.awaiting} booking${b.awaiting > 1 ? 's' : ''} waiting for payment` : 'Including service fees'}/>
+      </div>
+      {!!b?.awaiting && <section className="card-panel nudge warn"><span className="nudge-icon"><Wallet size={22}/></span><div className="nudge-body"><h3>{b.awaiting} worker{b.awaiting > 1 ? 's are' : ' is'} waiting for you to pay into escrow</h3><p className="muted">Workers see the shift as secured once you’ve paid.</p></div><button className="btn btn-primary btn-sm themed" onClick={() => go('shifts')}>Pay now</button></section>}
+      <Completeness onFix={() => go('profile')} items={[['logo or photo', !!profile.avatar_url], ['business name', !!profile.business_name], ['what you do', (profile.bio || '').length >= 40], ['type of business', !!profile.business_type], ['hours', !!profile.business_hours], ['phone', !!profile.phone]]}/>
+      <div className="quick-grid">
+        <button className="quick" onClick={() => go('post')}><span><Plus size={20}/></span><strong>Post a shift</strong><small>Set the hourly rate in rand</small></button>
+        <button className="quick" onClick={() => go('shifts')}><span><Users size={20}/></span><strong>Manage workers</strong><small>Hours, pay and no-shows</small></button>
+        <button className="quick" onClick={() => go('profile')}><span><Palette size={20}/></span><strong>Business profile</strong><small>Logo, theme and hours</small></button>
+        <a className="quick" href="shifts.html"><span><Eye size={20}/></span><strong>See the shift board</strong><small>What workers see</small></a>
+      </div>
+    </div>
+  );
+}
+
+function Toggle({on, onChange, disabled}: {on: boolean; onChange: (v: boolean) => void; disabled?: boolean}) {
+  return <button type="button" role="switch" aria-checked={on} className={'toggle' + (on ? ' on' : '')} onClick={() => onChange(!on)} disabled={disabled}><i/></button>;
+}
+
+function AccountSettings({sb, profile, email, reload}: {sb: SupabaseClient; profile: Profile; email: string; reload: () => void}) {
+  const m = modes(profile);
+  const [bizName, setBizName] = useState(profile.business_name || ''), [askBiz, setAskBiz] = useState(false);
+  const [msg, setMsg] = useState<{kind: 'error' | 'ok'; text: string} | null>(null), [busy, setBusy] = useState(false);
+  async function update(patch: Record<string, unknown>, ok: string) {
+    setBusy(true); setMsg(null);
+    const {error} = await sb.from('profiles').update(patch).eq('id', profile.id);
+    setBusy(false);
+    if (error) return setMsg({kind: 'error', text: /column|schema cache/.test(error.message) ? 'Ask Community Work to finish the latest update, then try again.' : error.message});
+    setMsg({kind: 'ok', text: ok}); reload();
+  }
+  const setWork = (v: boolean) => {
+    if (!v && !m.hire) return setMsg({kind: 'error', text: 'Keep at least one mode switched on.'});
+    update(v ? {can_work: true} : {can_work: false, active_mode: 'business'}, v ? 'Working is on. Switch to it at the top of your dashboard.' : 'Working is off.');
+  };
+  const setHire = (v: boolean) => {
+    if (!v && !m.work) return setMsg({kind: 'error', text: 'Keep at least one mode switched on.'});
+    if (v && !bizName.trim()) { setAskBiz(true); return; }
+    update(v ? {can_hire: true, business_name: bizName.trim()} : {can_hire: false, active_mode: 'worker'}, v ? 'Hiring is on. Switch to it at the top of your dashboard.' : 'Hiring is off.');
+  };
+  return (
+    <div className="split">
+      <div className="stack">
+        <section className="card-panel section-card">
+          <header className="sec-head"><Repeat size={18}/><div><h2>One account, two modes</h2><p>Switch on both to pick up shifts and hire people with the same login. Each mode has its own dashboard.</p></div></header>
+          <div className="mode-row">
+            <span className="mode-ic"><Sparkles size={20}/></span>
+            <div><strong>Working</strong><small>Pick up paid shifts, get paid to your bank, build your worker profile.</small></div>
+            <Toggle on={m.work} onChange={setWork} disabled={busy}/>
+          </div>
+          <div className="mode-row">
+            <span className="mode-ic"><Building2 size={20}/></span>
+            <div><strong>Hiring</strong><small>Post shifts with an hourly rate, book workers and pay through escrow.</small></div>
+            <Toggle on={m.hire} onChange={setHire} disabled={busy}/>
+          </div>
+          {askBiz && (
+            <form className="inline-form" onSubmit={e => { e.preventDefault(); if (bizName.trim().length >= 2) { setAskBiz(false); setHire(true); } }}>
+              <label className="field">Business name (shown to workers)<input value={bizName} onChange={e => setBizName(e.target.value)} minLength={2} maxLength={120} required autoFocus placeholder="e.g. Thandi’s Kitchen or your own name"/></label>
+              <div className="row-gap start"><button className="btn btn-primary btn-sm themed">Turn on hiring</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => setAskBiz(false)}>Cancel</button></div>
+            </form>
+          )}
+          {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
+        </section>
+        <section className="card-panel section-card">
+          <header className="sec-head"><KeyRound size={18}/><div><h2>Sign-in</h2><p>{email}</p></div></header>
+          <form className="form" onSubmit={async e => {
+            e.preventDefault();
+            const pw = String(new FormData(e.currentTarget).get('password'));
+            const {error} = await sb.auth.updateUser({password: pw});
+            setMsg(error ? {kind: 'error', text: error.message} : {kind: 'ok', text: 'Password changed.'});
+            if (!error) (e.target as HTMLFormElement).reset();
+          }}>
+            <label className="field">New password<input name="password" type="password" minLength={10} required autoComplete="new-password"/><small>At least 10 characters.</small></label>
+            <button className="btn btn-outline btn-sm">Change password</button>
+          </form>
+        </section>
+      </div>
+      <aside className="tips">
+        <ShieldCheck size={22}/>
+        <h2>Your privacy</h2>
+        <p className="muted">Your profile is visible to signed-in members. Your phone number is only shown to people you’re booked with, and your CV only to businesses whose shifts you pick up.</p>
+        <a className="link" href="privacy.html">Privacy details <ArrowRight size={15}/></a>
+      </aside>
+    </div>
+  );
+}
+
+function Suspended({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
+  const [appeal, setAppeal] = useState<{status: string; response: string | null; created_at: string} | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false), [err, setErr] = useState('');
+  const load = () => sb.from('appeals').select('status, response, created_at').eq('user_id', profile.id).order('created_at', {ascending: false}).limit(1)
+    .then(({data}) => setAppeal(data?.[0] ?? null));
+  useEffect(() => { load(); }, []);
+  const pending = appeal?.status === 'pending';
+  return (
+    <section className="card-panel suspended">
+      <header className="sec-head"><Ban size={20}/><div><h2>Your account is paused</h2><p>{profile.suspended_reason || 'Suspended by Community Work'}. You can’t pick up or post shifts until it’s restored.</p></div></header>
+      {appeal === undefined ? <span className="spinner"/> : pending ? (
+        <Notice>Your appeal was sent on {new Date(appeal!.created_at).toLocaleDateString('en-ZA')}. Our team will review it soon.</Notice>
+      ) : (
+        <form className="form" onSubmit={async e => {
+          e.preventDefault(); setBusy(true); setErr('');
+          const reason = String(new FormData(e.currentTarget).get('reason')).trim();
+          const {error} = await sb.from('appeals').insert({user_id: profile.id, reason});
+          setBusy(false);
+          if (error) setErr(error.message); else load();
+        }}>
+          {appeal?.status === 'denied' && <Notice kind="error">Your last appeal was not approved{appeal.response ? `: ${appeal.response}` : '.'} You can appeal again with more information.</Notice>}
+          <label className="field">Tell us what happened
+            <textarea name="reason" rows={4} minLength={10} maxLength={2000} required placeholder="Explain why you cancelled or missed the shifts, and what you’ll do differently."/>
+          </label>
+          {err && <Notice kind="error">{err}</Notice>}
+          <button className="btn btn-primary" disabled={busy}>{busy && <LoaderCircle className="spin" size={18}/>}Send appeal</button>
+        </form>
+      )}
+    </section>
   );
 }
 
@@ -338,34 +473,72 @@ type Booking = {id: string; status: string; hours_worked: number | null; busines
 
 function WorkerBookings({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
   const [rows, setRows] = useState<Booking[] | null>(null), [err, setErr] = useState('');
+  const [settings, setSettings] = useState({strike_limit: 3, cancel_grace_minutes: 10});
+  const [cancelling, setCancelling] = useState<Booking | null>(null), [busy, setBusy] = useState(false);
   const load = async () => {
     const {data, error} = await sb.from('applications').select('*, shift:shifts(*)').eq('worker_id', profile.id).order('created_at', {ascending: false});
     if (error) return setErr(error.message);
     const {data: pays} = await sb.from('payments').select('id, state, amount_zar, application_id').eq('worker_id', profile.id);
     setRows((data as any[]).map(r => ({...r, payment: pays?.find(p => p.application_id === r.id) ?? null})));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); sb.rpc('public_settings').then(({data}) => data && setSettings(s => ({...s, ...(data as any)}))); }, []);
   if (err) return <Notice kind="error">{err}</Notice>;
   if (!rows) return <div className="card-panel center"><span className="spinner"/></div>;
-  if (!rows.length) return <div className="empty"><div className="empty-icon"><CalendarDays size={28}/></div><h2>No shifts yet</h2><p>Find a shift near you and apply in one tap.</p><a className="btn btn-primary" href="shifts.html">See shifts</a></div>;
+  const now = Date.now();
+  const upcoming = rows.filter(b => b.status === 'accepted' && Date.parse(b.shift.ends_at) > now).sort((a, b) => Date.parse(a.shift.starts_at) - Date.parse(b.shift.starts_at));
+  const past = rows.filter(b => !upcoming.includes(b));
+  const free = (b: Booking) => Date.now() - Date.parse((b as any).created_at) < settings.cancel_grace_minutes * 60000;
+  const strikes = profile.strikes ?? 0;
+
+  async function cancel(b: Booking) {
+    setBusy(true);
+    const {error} = await sb.from('applications').update({status: 'withdrawn'}).eq('id', b.id);
+    if (!error && b.payment && ['awaiting_payment', 'funded'].includes(b.payment.state)) {
+      try { await callFunction(sb, 'payments', {action: 'cancel', paymentId: b.payment.id, reason: 'Worker cancelled the shift'}); } catch { /* staff will refund */ }
+    }
+    setBusy(false); setCancelling(null);
+    if (error) alert(error.message);
+    location.reload();
+  }
+
+  const card = (b: Booking) => (
+    <article className="card-panel booking" key={b.id}>
+      <div className="booking-top"><div><h3>{b.shift.title}</h3><p className="muted small">{day(b.shift.starts_at)} · {time(b.shift.starts_at)}–{time(b.shift.ends_at)}</p></div><StatusPill status={b.status}/></div>
+      <p className="meta-line"><MapPin size={15}/>{b.status === 'accepted' || b.status === 'completed' ? (b.shift.address ? `${b.shift.address}, ` : '') : ''}{b.shift.city}
+        <a className="link small" href={'profile.html?id=' + b.shift.business_id}>Business profile <ArrowUpRight size={13}/></a></p>
+      <p className="meta-line"><Banknote size={15}/>{money(b.shift.hourly_rate_zar)}/hr · {money(b.shift.hourly_rate_zar * hoursBetween(b.shift.starts_at, b.shift.ends_at))} for the shift · {b.shift.payment_method === 'cash' ? 'Paid in cash' : 'Escrow-protected'}</p>
+      {b.payment && <p className="meta-line"><Wallet size={15}/>Pay: <PayState state={b.payment.state}/></p>}
+      <div className="row-gap start">
+        {b.status === 'accepted' && Date.parse(b.shift.starts_at) > now &&
+          <button className="btn btn-outline btn-sm" onClick={() => setCancelling(b)}>Cancel shift</button>}
+        {b.hours_worked != null && !b.worker_confirmed_at &&
+          <button className="btn btn-primary btn-sm themed" onClick={async () => { await sb.from('applications').update({worker_confirmed_at: new Date().toISOString()}).eq('id', b.id); load(); }}><Check size={15}/>Confirm {b.hours_worked} hours</button>}
+        {b.payment?.state === 'funded' && <button className="btn btn-ghost btn-sm" onClick={async () => { if (confirm('Report a problem with this shift’s pay? Our team will review it and the money stays held until resolved.')) { try { await callFunction(sb, 'payments', {action: 'dispute', paymentId: b.payment!.id}); load(); } catch (e) { alert(errorText(e)); } } }}>Report a problem</button>}
+      </div>
+    </article>
+  );
+
   return (
     <div className="stack">
-      {!profile.payout_ready && <Notice>Add your payout details under <strong>Get paid</strong> so businesses can book you for escrow-paid shifts.</Notice>}
-      {rows.map(b => (
-        <article className="card-panel booking" key={b.id}>
-          <div className="booking-top"><h3>{b.shift.title}</h3><StatusPill status={b.status}/></div>
-          <p className="meta-line"><CalendarDays size={15}/>{day(b.shift.starts_at)} · {time(b.shift.starts_at)}–{time(b.shift.ends_at)} <MapPin size={15}/>{b.status === 'accepted' || b.status === 'completed' ? (b.shift.address ? `${b.shift.address}, ` : '') : ''}{b.shift.city}</p>
-          <p className="meta-line"><Banknote size={15}/>{money(b.shift.hourly_rate_zar)}/hr · {money(b.shift.hourly_rate_zar * hoursBetween(b.shift.starts_at, b.shift.ends_at))} for the shift · {b.shift.payment_method === 'cash' ? 'Paid in cash' : 'Escrow-protected'}</p>
-          {b.payment && <p className="meta-line"><Wallet size={15}/>Pay: <PayState state={b.payment.state}/></p>}
-          <div className="row-gap">
-            {(b.status === 'applied' || b.status === 'accepted') && Date.parse(b.shift.starts_at) > Date.now() &&
-              <button className="btn btn-outline btn-sm" onClick={async () => { await sb.from('applications').update({status: 'withdrawn'}).eq('id', b.id); load(); }}>Withdraw</button>}
-            {b.hours_worked != null && !b.worker_confirmed_at &&
-              <button className="btn btn-primary btn-sm" onClick={async () => { await sb.from('applications').update({worker_confirmed_at: new Date().toISOString()}).eq('id', b.id); load(); }}><Check size={15}/>Confirm {b.hours_worked} hours</button>}
-            {b.payment?.state === 'funded' && <button className="btn btn-outline btn-sm" onClick={async () => { if (confirm('Report a problem with this shift’s pay? Our team will review it and the money stays held until resolved.')) { try { await callFunction(sb, 'payments', {action: 'dispute', paymentId: b.payment!.id}); load(); } catch (e) { alert(errorText(e)); } } }}>Report a problem</button>}
+      {strikes > 0 && <Notice kind="error">You have {strikes} of {settings.strike_limit} strikes. Cancelling a shift you picked up, or not showing up, adds a strike. At {settings.strike_limit} your account is paused until an appeal is approved.</Notice>}
+      {!profile.payout_ready && <Notice>Add your bank details under <strong>Get paid</strong> so escrow shifts can pay you.</Notice>}
+      <h2 className="list-title">Upcoming <span>{upcoming.length}</span></h2>
+      {upcoming.length ? upcoming.map(card) : <div className="empty small"><div className="empty-icon"><CalendarDays size={26}/></div><h3>No upcoming shifts</h3><p>Pick up a shift near you in one tap.</p><a className="btn btn-primary themed" href="shifts.html">Find shifts</a></div>}
+      {past.length > 0 && <><h2 className="list-title">History <span>{past.length}</span></h2>{past.map(card)}</>}
+      {cancelling && (
+        <Sheet title="Cancel this shift?" onClose={() => setCancelling(null)}>
+          <div className="form">
+            <p><strong>{cancelling.shift.title}</strong> · {day(cancelling.shift.starts_at)} {time(cancelling.shift.starts_at)}</p>
+            {free(cancelling)
+              ? <Notice kind="ok">You picked this up less than {settings.cancel_grace_minutes} minutes ago, so cancelling won’t count as a strike.</Notice>
+              : <Notice kind="error">This will be strike {strikes + 1} of {settings.strike_limit}.{strikes + 1 >= settings.strike_limit ? ' Your account will be paused until an appeal is approved.' : ''} The business is counting on you; only cancel if you really can’t make it.</Notice>}
+            <div className="row-gap start">
+              <button className="btn btn-dark" disabled={busy} onClick={() => cancel(cancelling)}>{busy && <LoaderCircle className="spin" size={16}/>}Yes, cancel shift</button>
+              <button className="btn btn-outline" onClick={() => setCancelling(null)}>Keep my shift</button>
+            </div>
           </div>
-        </article>
-      ))}
+        </Sheet>
+      )}
     </div>
   );
 }
@@ -482,27 +655,33 @@ function BusinessShifts({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
   useEffect(() => { load(); }, []);
   const act = async (id: string, fn: () => Promise<any>) => { setBusyId(id); try { await fn(); } catch (e) { alert(errorText(e)); } finally { setBusyId(''); load(); } };
   const update = (id: string, patch: Record<string, unknown>) => act(id, async () => { const {error} = await sb.from('applications').update(patch).eq('id', id); if (error) throw error; });
+  // Ending a booking (no-show or released) refunds any escrow payment back to the business.
+  const endBooking = (a: Applicant, status: 'no_show' | 'declined') => act(a.id, async () => {
+    const {error} = await sb.from('applications').update({status}).eq('id', a.id);
+    if (error) throw error;
+    if (a.payment && ['awaiting_payment', 'funded'].includes(a.payment.state)) await callFunction(sb, 'payments', {action: 'cancel', paymentId: a.payment.id, reason: status === 'no_show' ? 'Worker did not show up' : 'Business released the worker'});
+  });
   const openCv = async (path: string) => { const {data} = await sb.storage.from('resumes').createSignedUrl(path, 120); if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener'); };
 
   if (err) return <Notice kind="error">{err}</Notice>;
   if (!rows) return <div className="card-panel center"><span className="spinner"/></div>;
-  if (!rows.length) return <div className="empty"><div className="empty-icon"><Briefcase size={28}/></div><h2>No shifts posted yet</h2><p>Post a shift and nearby workers can apply straight away.</p><a className="btn btn-primary" href="account.html?tab=post">Post a shift</a></div>;
+  if (!rows.length) return <div className="empty"><div className="empty-icon"><Briefcase size={28}/></div><h2>No shifts posted yet</h2><p>Post a shift and nearby workers can pick it up straight away.</p><a className="btn btn-primary" href="account.html?tab=post">Post a shift</a></div>;
   return (
     <div className="stack">
       {rows.map(s => (
         <article className="card-panel booking" key={s.id}>
           <div className="booking-top"><h3>{s.title}</h3><StatusPill status={s.status}/></div>
           <p className="meta-line"><CalendarDays size={15}/>{day(s.starts_at)} · {time(s.starts_at)}–{time(s.ends_at)} <MapPin size={15}/>{s.city} <Banknote size={15}/>{money(s.hourly_rate_zar)}/hr · {s.payment_method === 'cash' ? 'Cash' : 'Escrow'}</p>
-          <p className="meta-line"><Users size={15}/>{s.apps.filter(a => ['accepted', 'completed'].includes(a.status)).length} of {s.workers_needed} booked · {s.apps.length} applied</p>
+          <p className="meta-line"><Users size={15}/>{s.apps.filter(a => ['accepted', 'completed'].includes(a.status)).length} of {s.workers_needed} spots filled</p>
           {s.apps.length > 0 && (
             <div className="applicants">
               {s.apps.map(a => {
                 const w = a.worker; const shiftHours = hoursBetween(s.starts_at, s.ends_at);
                 return (
                   <div className="applicant" key={a.id}>
-                    <span className="avatar">{(w?.full_name || '?').slice(0, 2).toUpperCase()}</span>
+                    <a href={'profile.html?id=' + a.worker_id} aria-label="Worker profile"><Avatar url={w?.avatar_url} name={w?.full_name} size={46} themeId={w?.theme} ring/></a>
                     <div className="applicant-body">
-                      <strong>{w?.full_name || 'Worker'}{w?.verified && <BadgeCheck size={14}/>}</strong> <StatusPill status={a.status}/>
+                      <a className="applicant-name" href={'profile.html?id=' + a.worker_id}>{w?.full_name || 'Worker'}{w?.verified && <BadgeCheck size={14}/>}</a> <StatusPill status={a.status}/>
                       {w?.headline && <small>{w.headline}</small>}
                       {w?.skills?.length ? <small>{w.skills.slice(0, 6).join(' · ')}</small> : null}
                       {a.message && <small>“{a.message}”</small>}
@@ -529,7 +708,9 @@ function BusinessShifts({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
                         {a.status === 'accepted' && Date.parse(s.starts_at) < Date.now() && a.hours_worked == null &&
                           <button className="btn btn-outline btn-sm" onClick={() => { const h = prompt('Hours worked', String(shiftHours)); if (h) update(a.id, {hours_worked: Number(h), business_confirmed_at: new Date().toISOString()}); }}><Clock size={14}/>Record hours</button>}
                         {a.status === 'accepted' && Date.parse(s.starts_at) < Date.now() && a.hours_worked == null &&
-                          <button className="btn btn-outline btn-sm" onClick={() => update(a.id, {status: 'no_show'})}>No-show</button>}
+                          <button className="btn btn-outline btn-sm" onClick={() => confirm(`Mark ${w?.full_name || 'this worker'} as a no-show? It counts as a strike on their account and any escrow payment is refunded to you.`) && endBooking(a, 'no_show')}>No-show</button>}
+                        {a.status === 'accepted' && Date.parse(s.starts_at) > Date.now() &&
+                          <button className="btn btn-ghost btn-sm" onClick={() => confirm(`Release ${w?.full_name || 'this worker'} from this shift? The spot opens again and any escrow payment is refunded to you. It doesn’t count against the worker.`) && endBooking(a, 'declined')}>Release worker</button>}
                         {a.payment?.state === 'funded' && a.hours_worked != null &&
                           <button className="btn btn-dark btn-sm" disabled={busyId === a.id} onClick={() => confirm(`Release ${money(a.payment!.amount_zar)} to ${w?.full_name || 'the worker'}?`) && act(a.id, () => callFunction(sb, 'payments', {action: 'release', paymentId: a.payment!.id}))}><Banknote size={14}/>Release pay</button>}
                         {s.payment_method === 'cash' && a.status === 'accepted' && a.hours_worked != null &&
@@ -552,7 +733,8 @@ function BusinessShifts({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
 
 // ===================================================================== Shift board
 type OpenShift = {id: string; title: string; description: string; category: string; city: string; province: string; starts_at: string; ends_at: string;
-  hourly_rate_zar: number; workers_needed: number; booked: number; payment_method: string; business_name: string; business_verified: boolean; distance_km: number | null};
+  hourly_rate_zar: number; workers_needed: number; booked: number; payment_method: string; business_id?: string; business_name: string; business_verified: boolean;
+  business_avatar?: string | null; business_theme?: string | null; distance_km: number | null};
 
 export function ShiftsPage() {
   const acct = useAccount();
@@ -560,65 +742,107 @@ export function ShiftsPage() {
   const [radius, setRadius] = useState(50);
   const [rows, setRows] = useState<OpenShift[] | null>(null), [err, setErr] = useState('');
   const [mine, setMine] = useState<Set<string>>(new Set());
-  const [applying, setApplying] = useState<OpenShift | null>(null), [pickArea, setPickArea] = useState(false);
-  useEffect(() => {
+  const [picking, setPicking] = useState<OpenShift | null>(null), [pickArea, setPickArea] = useState(false);
+  const [busy, setBusy] = useState(false), [pickErr, setPickErr] = useState(''), [booked, setBooked] = useState<OpenShift | null>(null);
+  const load = () => {
     if (!acct.ready || !acct.sb) return;
     acct.sb.rpc('open_shifts', {p_lat: area?.lat ?? null, p_lon: area?.lon ?? null, p_radius_km: area ? radius : 2000, p_limit: 200})
       .then(({data, error}) => { if (error) setErr(error.message); else setRows(data as OpenShift[]); });
     if (acct.session) acct.sb.from('applications').select('shift_id').eq('worker_id', acct.session.user.id).then(({data}) => setMine(new Set((data || []).map(d => d.shift_id))));
-  }, [acct.ready, acct.session?.user.id, area?.lat, area?.lon, radius]);
+  };
+  useEffect(load, [acct.ready, acct.session?.user.id, area?.lat, area?.lon, radius]);
 
   if (acct.ready && !acct.sb) return <NotConfigured/>;
-  const worker = acct.profile?.account_type === 'worker';
+  const m = acct.profile ? modes(acct.profile) : null;
+  function tryPick(s: OpenShift) {
+    track('shift_view', s.id);
+    if (!acct.session) { location.href = 'account.html?signup=1&type=worker'; return; }
+    setPickErr(''); setPicking(s);
+  }
+  async function pickUp(s: OpenShift, message: string | null) {
+    setBusy(true); setPickErr('');
+    const {error} = await acct.sb!.from('applications').insert({shift_id: s.id, worker_id: acct.session!.user.id, message});
+    setBusy(false);
+    if (error) return setPickErr(error.message.includes('row-level security') ? 'You can’t pick up this shift right now.' : error.message);
+    track('shift_apply', s.id);
+    setMine(x => new Set([...x, s.id])); setPicking(null); setBooked(s); load();
+  }
+
+  const blocked = !acct.profile ? null
+    : acct.profile.suspended ? <Notice kind="error">Your account is paused, so you can’t pick up shifts. <a className="link" href="account.html">Send an appeal</a></Notice>
+    : !m?.work ? <Notice>Switch on <strong>Working</strong> in your <a className="link" href="account.html?tab=settings">account settings</a> to pick up shifts with this account.</Notice>
+    : null;
+
   return (
     <div className="page">
       <div className="page-head">
         <p className="overline">Paid shifts · in person</p>
         <h1>Shifts near you</h1>
-        <p className="lede">Book a shift with a local business. Pay is set per hour and, for escrow shifts, held safely before you start.</p>
+        <p className="lede">Pick up a shift with a local business in one tap — no waiting to be chosen. Pay is set per hour and, for escrow shifts, secured before you start.</p>
       </div>
       <div className="tools-top shifts-tools">
         <button className="location-chip" onClick={() => setPickArea(true)}><MapPin size={16}/><span>{area ? area.label : 'Set your area'}</span></button>
         <div className="chip-wrap">{[10, 25, 50, 100].map(r => <button key={r} className={radius === r ? 'on' : ''} onClick={() => setRadius(r)}>{r} km</button>)}</div>
       </div>
-      {!acct.session && <Notice>Create a free worker account to apply. <a className="link" href="account.html?signup=1&type=worker">Sign up</a> · <a className="link" href="account.html">Sign in</a></Notice>}
+      {!acct.session && <Notice>Create a free account to pick up shifts. <a className="link" href="account.html?signup=1&type=worker">Sign up</a> · <a className="link" href="account.html">Sign in</a></Notice>}
+      {blocked}
       {err && <Notice kind="error">{err}</Notice>}
       {!rows ? <div className="job-list">{[0, 1, 2].map(i => <div className="job-card skeleton" key={i}><span/><span/><span/></div>)}</div>
         : !rows.length ? <div className="empty"><div className="empty-icon"><CalendarDays size={28}/></div><h2>No open shifts here yet</h2><p>Try a bigger distance, or check back soon — businesses post new shifts every day.</p><a className="btn btn-outline" href="find-work.html">Browse other jobs</a></div>
         : <div className="job-list">{rows.map(s => {
             const h = hoursBetween(s.starts_at, s.ends_at);
-            const applied = mine.has(s.id);
+            const have = mine.has(s.id), left = s.workers_needed - s.booked;
+            const own = acct.session && s.business_id === acct.session.user.id;
             return (
-              <article className="job-card community" key={s.id}>
-                <div className="card-head"><span className="avatar">{s.business_name.slice(0, 2).toUpperCase()}</span>
-                  <div className="card-title"><h3>{s.title}</h3><p>{s.business_name}{s.business_verified && <> · <BadgeCheck size={13}/> Verified</>}</p></div></div>
+              <article className="job-card shift-card" key={s.id} style={themeStyle(s.business_theme)}>
+                <div className="card-head">
+                  <a href={s.business_id ? 'profile.html?id=' + s.business_id : undefined} aria-label={s.business_name + ' profile'}><Avatar url={s.business_avatar} name={s.business_name} size={46} themeId={s.business_theme} ring/></a>
+                  <div className="card-title"><h3>{s.title}</h3><p>{s.business_name}{s.business_verified && <> · <BadgeCheck size={13}/> Verified</>}</p></div>
+                  <span className="spots">{left} {left === 1 ? 'spot' : 'spots'} left</span>
+                </div>
                 <div className="tags"><span className="tag onsite"><MapPin size={13}/>In person</span><span className="tag">{s.category}</span><span className={'tag ' + (s.payment_method === 'escrow' ? 'local' : '')}>{s.payment_method === 'escrow' ? <><ShieldCheck size={13}/>Pay secured</> : <><Banknote size={13}/>Cash</>}</span></div>
                 <p className="excerpt">{s.description}</p>
-                <div className="meta"><span><CalendarDays size={14}/>{day(s.starts_at)} · {time(s.starts_at)}–{time(s.ends_at)}</span><span><MapPin size={14}/>{s.city}{s.distance_km != null ? ` · ${s.distance_km.toFixed(s.distance_km < 10 ? 1 : 0)} km` : ''}</span><span><Users size={14}/>{s.workers_needed - s.booked} of {s.workers_needed} spots left</span></div>
+                <div className="meta"><span><CalendarDays size={14}/>{day(s.starts_at)} · {time(s.starts_at)}–{time(s.ends_at)}</span><span><MapPin size={14}/>{s.city}{s.distance_km != null ? ` · ${s.distance_km.toFixed(s.distance_km < 10 ? 1 : 0)} km` : ''}</span></div>
                 <div className="card-foot">
                   <div className="pay"><strong>{money(s.hourly_rate_zar)} / hr</strong><small>{money(s.hourly_rate_zar * h)} for {h} h</small></div>
-                  {applied ? <span className="pill accepted">Applied</span>
-                    : <button className="btn btn-primary btn-sm" onClick={() => { track('shift_view', s.id); if (!acct.session) location.href = 'account.html?signup=1&type=worker'; else if (!worker) alert('Shifts are booked by worker accounts. Create a separate worker account to apply.'); else setApplying(s); }}>Apply</button>}
+                  {have ? <span className="pill accepted"><Check size={13}/>You’re booked</span>
+                    : own ? <span className="pill">Your shift</span>
+                    : <button className="btn btn-primary btn-sm themed" onClick={() => tryPick(s)}><Zap size={15}/>Pick up</button>}
                 </div>
               </article>
             );
           })}</div>}
       {pickArea && <Sheet title="Where do you want to work?" onClose={() => setPickArea(false)}><LocationPicker onSelect={l => { choose(l); setPickArea(false); }}/></Sheet>}
-      {applying && acct.sb && acct.session && (
-        <Sheet title={`Apply: ${applying.title}`} onClose={() => setApplying(null)}>
-          <form className="form" onSubmit={async e => {
-            e.preventDefault();
-            const message = String(new FormData(e.currentTarget).get('message') || '').slice(0, 500) || null;
-            const {error} = await acct.sb!.from('applications').insert({shift_id: applying.id, worker_id: acct.session!.user.id, message});
-            if (error) return alert(error.message);
-            track('shift_apply', applying.id);
-            setMine(m => new Set([...m, applying.id])); setApplying(null);
-          }}>
-            <p className="muted">{applying.business_name} will see your profile, skills and CV. If they book you, you’ll see the exact address and their contact details.</p>
-            <label className="field">Message (optional)<textarea name="message" rows={3} maxLength={500} placeholder="Why you’re a good fit, when you can arrive."/></label>
-            {!acct.profile?.payout_ready && applying.payment_method === 'escrow' && <Notice>Add payout details in your account so you can be paid for escrow shifts.</Notice>}
-            <button className="btn btn-primary btn-block">Send application</button>
+      {picking && acct.sb && acct.session && (
+        <Sheet title="Pick up this shift?" onClose={() => setPicking(null)}>
+          <form className="form" style={themeStyle(picking.business_theme)} onSubmit={e => { e.preventDefault(); pickUp(picking, String(new FormData(e.currentTarget).get('message') || '').slice(0, 500) || null); }}>
+            <div className="pick-summary" style={themeStyle(picking.business_theme)}>
+              <Avatar url={picking.business_avatar} name={picking.business_name} size={52} themeId={picking.business_theme} ring/>
+              <div><strong>{picking.title}</strong><span>{picking.business_name}</span><span>{day(picking.starts_at)} · {time(picking.starts_at)}–{time(picking.ends_at)} · {picking.city}</span></div>
+              <b className="pick-pay">{money(picking.hourly_rate_zar * hoursBetween(picking.starts_at, picking.ends_at))}</b>
+            </div>
+            {blocked}
+            <ul className="pick-rules">
+              <li><Check size={15}/>You’re booked straight away — no waiting to be chosen.</li>
+              <li><Check size={15}/>You’ll see the exact address and the business’s phone number.</li>
+              <li><AlertTriangle size={15}/>Cancelling or not showing up is a strike. 3 strikes pauses your account.</li>
+              {picking.payment_method === 'escrow' && !acct.profile?.payout_ready && <li><Wallet size={15}/>Add your bank details under Get paid so you can be paid.</li>}
+            </ul>
+            <label className="field">Note to the business (optional)<textarea name="message" rows={2} maxLength={500} placeholder="e.g. I’ll arrive 15 minutes early."/></label>
+            {pickErr && <Notice kind="error">{pickErr}</Notice>}
+            <button className="btn btn-primary btn-block btn-lg themed" disabled={busy || !!blocked}>{busy ? <LoaderCircle className="spin" size={18}/> : <Zap size={18}/>}Pick up shift</button>
           </form>
+        </Sheet>
+      )}
+      {booked && (
+        <Sheet title="You’re booked!" onClose={() => setBooked(null)}>
+          <div className="success">
+            <span className="success-icon"><Check size={30}/></span>
+            <h2>{booked.title}</h2>
+            <p>{day(booked.starts_at)} · {time(booked.starts_at)}–{time(booked.ends_at)} with {booked.business_name}. The address is in My shifts.</p>
+            <a className="btn btn-primary" href="account.html?tab=bookings">See my shifts</a>
+            <button className="btn btn-outline" onClick={() => setBooked(null)}>Keep browsing</button>
+          </div>
         </Sheet>
       )}
     </div>
@@ -675,28 +899,46 @@ function TwoFactor({sb, onDone}: {sb: SupabaseClient; onDone: () => void}) {
   );
 }
 
+const ADMIN_TABS: [string, string, React.ComponentType<{size?: number}>][] = [
+  ['overview', 'Overview', LayoutDashboard], ['live', 'Live', Activity], ['users', 'Users', Users], ['appeals', 'Appeals', Gavel],
+  ['payments', 'Payments', Wallet], ['team', 'Team', ShieldCheck], ['settings', 'Settings', Settings], ['audit', 'Activity log', FileText]];
+
 function AdminConsole({sb, role, me}: {sb: SupabaseClient; role: 'ceo' | 'admin'; me: string}) {
-  const [tab, setTab] = useState('overview');
-  const tabs = [['overview', 'Overview'], ['live', 'Live'], ['users', 'Users'], ['payments', 'Payments'], ['team', 'Team'], ...(role === 'ceo' ? [['settings', 'Settings']] : []), ['audit', 'Activity log']];
+  const [tab, setTab] = useState(params.get('tab') || 'overview');
+  const tabs = ADMIN_TABS.filter(([k]) => k !== 'settings' || role === 'ceo');
+  const {data: pending} = useRpc<any[]>(sb, 'admin_appeals', {p_status: 'pending'}, [tab]);
   return (
-    <div className="page wide">
-      <div className="account-head">
-        <span className="avatar big"><ShieldCheck size={22}/></span>
-        <div><h1>{role === 'ceo' ? 'CEO dashboard' : 'Admin dashboard'}</h1><p className="muted">Community Work South Africa · protected with your authenticator</p></div>
-        <div className="row-gap end">
-          <a className="btn btn-outline btn-sm" href="https://analytics.google.com/" target="_blank" rel="noreferrer"><BarChart3 size={15}/>Google Analytics</a>
-          <a className="btn btn-outline btn-sm" href="https://www.google.com/adsense/" target="_blank" rel="noreferrer">AdSense</a>
-          <a className="btn btn-outline btn-sm" href="https://www.tradesafe.co.za/" target="_blank" rel="noreferrer">TradeSafe</a>
+    <div className="page wide dash admin-dash">
+      <section className="dash-hero admin">
+        <div className="dash-hero-bg"><span/></div>
+        <div className="dash-hero-row">
+          <span className="hq-badge"><ShieldCheck size={30}/></span>
+          <div className="dash-id">
+            <p className="dash-hello">{greeting()} · {role === 'ceo' ? 'CEO' : 'Admin'}</p>
+            <h1>{role === 'ceo' ? 'CEO dashboard' : 'Admin dashboard'}</h1>
+            <p className="dash-sub"><Lock size={13}/> Protected with your authenticator</p>
+          </div>
+          <div className="dash-actions inline">
+            <a className="chip-link" href="https://analytics.google.com/" target="_blank" rel="noreferrer"><BarChart3 size={15}/>Analytics</a>
+            <a className="chip-link" href="https://www.google.com/adsense/" target="_blank" rel="noreferrer"><TrendingUp size={15}/>AdSense</a>
+            <a className="chip-link" href="https://www.tradesafe.co.za/" target="_blank" rel="noreferrer"><Wallet size={15}/>TradeSafe</a>
+            <a className="chip-link" href="account.html"><UserRound size={15}/>My account</a>
+          </div>
         </div>
+      </section>
+      <nav className="dash-tabs" role="tablist">
+        {tabs.map(([k, l, Icon]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}><Icon size={17}/><span>{l}</span>{k === 'appeals' && !!pending?.length && <em className="badge">{pending.length}</em>}</button>)}
+      </nav>
+      <div className="dash-body" key={tab}>
+        {tab === 'overview' && <Overview sb={sb} go={setTab}/>}
+        {tab === 'live' && <Live sb={sb}/>}
+        {tab === 'users' && <UsersAdmin sb={sb}/>}
+        {tab === 'appeals' && <AppealsAdmin sb={sb}/>}
+        {tab === 'payments' && <PaymentsAdmin sb={sb}/>}
+        {tab === 'team' && <TeamAdmin sb={sb} role={role} me={me}/>}
+        {tab === 'settings' && <SettingsAdmin sb={sb}/>}
+        {tab === 'audit' && <AuditAdmin sb={sb}/>}
       </div>
-      <div className="segmented tabs scroll" role="tablist">{tabs.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
-      {tab === 'overview' && <Overview sb={sb}/>}
-      {tab === 'live' && <Live sb={sb}/>}
-      {tab === 'users' && <UsersAdmin sb={sb}/>}
-      {tab === 'payments' && <PaymentsAdmin sb={sb}/>}
-      {tab === 'team' && <TeamAdmin sb={sb} role={role} me={me}/>}
-      {tab === 'settings' && <SettingsAdmin sb={sb}/>}
-      {tab === 'audit' && <AuditAdmin sb={sb}/>}
     </div>
   );
 }
@@ -718,7 +960,7 @@ function Tile({label, value, sub}: {label: string; value: React.ReactNode; sub?:
 }
 const n = (v: number | undefined) => (v ?? 0).toLocaleString('en-ZA');
 
-function Overview({sb}: {sb: SupabaseClient}) {
+function Overview({sb, go}: {sb: SupabaseClient; go: (t: string) => void}) {
   const [days, setDays] = useState(30);
   const {data: s, err} = useRpc<any>(sb, 'admin_stats', {p_days: days}, [days]);
   if (err) return <Notice kind="error">{err}</Notice>;
@@ -727,16 +969,30 @@ function Overview({sb}: {sb: SupabaseClient}) {
   return (
     <div className="stack">
       <div className="chip-wrap">{[1, 7, 30, 90].map(d => <button key={d} className={days === d ? 'on' : ''} onClick={() => setDays(d)}>{d === 1 ? 'Today' : `${d} days`}</button>)}</div>
-      <div className="tile-grid">
-        <Tile label="Visitors" value={n(s.traffic.visitors)} sub={`${n(s.traffic.page_views)} page views`}/>
-        <Tile label="Job apply clicks" value={n(s.traffic.apply_clicks)}/>
-        <Tile label="Sponsored clicks" value={n(s.traffic.sponsored_clicks)} sub={`${n(s.traffic.sponsored_views)} views · ${s.traffic.sponsored_views ? ((s.traffic.sponsored_clicks / s.traffic.sponsored_views) * 100).toFixed(1) : '0'}% click rate`}/>
-        <Tile label="Sign-ups" value={n(s.users.new)} sub={`${n(s.users.total)} accounts: ${n(s.users.workers)} workers, ${n(s.users.businesses)} businesses`}/>
-        <Tile label="Shifts" value={n(s.shifts.posted)} sub={`${n(s.shifts.open)} open · ${n(s.shifts.filled)} booked · ${n(s.shifts.completed)} done`}/>
-        <Tile label="Applications" value={n(s.applications)}/>
-        <Tile label="Held in escrow" value={money(s.payments.held_zar)} sub={`${n(s.payments.awaiting)} awaiting payment · ${n(s.payments.disputed)} disputed`}/>
-        <Tile label="Paid to workers" value={money(s.payments.released_zar)} sub={`${money(s.payments.fees_zar)} in service fees`}/>
+      {!!s.reliability?.appeals_pending && <section className="card-panel nudge warn"><span className="nudge-icon"><Gavel size={22}/></span><div className="nudge-body"><h3>{s.reliability.appeals_pending} appeal{s.reliability.appeals_pending > 1 ? 's' : ''} waiting</h3><p className="muted">Suspended workers are waiting for a decision.</p></div><button className="btn btn-primary btn-sm" onClick={() => go('appeals')}>Review</button></section>}
+      <p className="overline">Traffic</p>
+      <div className="stat-grid">
+        <StatTile icon={Users} tone="theme" label="Visitors" value={n(s.traffic.visitors)} sub={`${n(s.traffic.page_views)} page views`}/>
+        <StatTile icon={MousePointerClick} tone="blue" label="Job apply clicks" value={n(s.traffic.apply_clicks)}/>
+        <StatTile icon={TrendingUp} tone="amber" label="Sponsored clicks" value={n(s.traffic.sponsored_clicks)} sub={`${n(s.traffic.sponsored_views)} views · ${s.traffic.sponsored_views ? ((s.traffic.sponsored_clicks / s.traffic.sponsored_views) * 100).toFixed(1) : '0'}% click rate`}/>
+        <StatTile icon={UserRound} tone="green" label="New sign-ups" value={n(s.users.new)} sub={`${n(s.users.total)} accounts in total`}/>
       </div>
+      <p className="overline">Marketplace</p>
+      <div className="stat-grid">
+        <StatTile icon={Briefcase} tone="theme" label="Shifts posted" value={n(s.shifts.posted)} sub={`${n(s.shifts.open)} open · ${n(s.shifts.filled)} full · ${n(s.shifts.completed)} done`}/>
+        <StatTile icon={Zap} tone="blue" label="Shifts picked up" value={n(s.applications)}/>
+        <StatTile icon={ShieldCheck} tone="green" label="Held in escrow" value={money(s.payments.held_zar)} sub={`${n(s.payments.awaiting)} awaiting · ${n(s.payments.disputed)} disputed`}/>
+        <StatTile icon={Banknote} tone="green" label="Paid to workers" value={money(s.payments.released_zar)} sub={`${money(s.payments.fees_zar)} earned in fees`}/>
+      </div>
+      {s.reliability && <>
+        <p className="overline">Reliability</p>
+        <div className="stat-grid">
+          <StatTile icon={Ban} tone="red" label="Cancellations" value={n(s.reliability.cancellations)} sub="strikes in this period"/>
+          <StatTile icon={AlertTriangle} tone="amber" label="No-shows" value={n(s.reliability.no_shows)}/>
+          <StatTile icon={Lock} tone="red" label="Suspended now" value={n(s.reliability.suspended)}/>
+          <StatTile icon={Gavel} tone="blue" label="Appeals waiting" value={n(s.reliability.appeals_pending)}/>
+        </div>
+      </>}
       <section className="card-panel">
         <h3>Visitors per day</h3>
         <div className="bars" role="img" aria-label="Daily page views">
@@ -789,13 +1045,14 @@ function UsersAdmin({sb}: {sb: SupabaseClient}) {
       {err && <Notice kind="error">{err}</Notice>}
       {!rows ? <div className="card-panel center"><span className="spinner"/></div> : (
         <section className="card-panel table-wrap"><table>
-          <thead><tr><th>Account</th><th>Type</th><th>Area</th><th>Joined</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Account</th><th>Mode</th><th>Area</th><th>Joined</th><th>Strikes</th><th>Status</th><th></th></tr></thead>
           <tbody>{rows.map(u => (
             <tr key={u.id}>
               <td><strong>{u.business_name || u.full_name || '—'}</strong><br/><small>{u.email}</small></td>
               <td>{u.account_type}{u.payout_ready && <><br/><small>payouts set</small></>}</td>
               <td>{[u.city, u.province].filter(Boolean).join(', ') || '—'}</td>
               <td>{new Date(u.created_at).toLocaleDateString('en-ZA')}</td>
+              <td>{u.strikes ?? 0}{u.total_strikes ? <small className="muted"> ({u.total_strikes} all-time)</small> : null}</td>
               <td>{u.suspended ? <span className="pill declined">Suspended</span> : u.verified ? <span className="pill accepted">Verified</span> : <span className="pill">Active</span>}</td>
               <td className="row-gap">
                 <button className="btn btn-outline btn-sm" onClick={() => flag(u.id, {p_verified: !u.verified})}>{u.verified ? 'Unverify' : 'Verify'}</button>
@@ -877,22 +1134,63 @@ function TeamAdmin({sb, role, me}: {sb: SupabaseClient; role: 'ceo' | 'admin'; m
 }
 
 function SettingsAdmin({sb}: {sb: SupabaseClient}) {
-  const [s, setS] = useState<any>(null), [msg, setMsg] = useState('');
+  const [s, setS] = useState<any>(null), [msg, setMsg] = useState<{kind: 'error' | 'ok'; text: string} | null>(null);
   useEffect(() => { sb.rpc('public_settings').then(({data}) => setS(data)); }, []);
   if (!s) return <span className="spinner"/>;
   return (
-    <form className="card-panel form narrow" onSubmit={async e => {
+    <form className="card-panel form narrow section-card" onSubmit={async e => {
       e.preventDefault();
       const f = new FormData(e.currentTarget);
-      const {error} = await sb.rpc('admin_set_settings', {p_min_hourly: Number(f.get('min')), p_fee_percent: Number(f.get('fee'))});
-      setMsg(error ? error.message : 'Saved.');
+      const {error} = await sb.rpc('admin_set_settings', {p_min_hourly: Number(f.get('min')), p_fee_percent: Number(f.get('fee')), p_strike_limit: Number(f.get('strikes')), p_cancel_grace: Number(f.get('grace'))});
+      setMsg(error ? {kind: 'error', text: error.message} : {kind: 'ok', text: 'Saved.'});
     }}>
-      <h3>Platform settings</h3>
-      <label className="field">Minimum hourly pay (R)<input name="min" type="number" step="0.01" min={0} defaultValue={s.min_hourly_zar}/><small>South Africa’s national minimum wage is R30.23/hour from 1 March 2026. Update it each March.</small></label>
-      <label className="field">Service fee charged to businesses (%)<input name="fee" type="number" step="0.5" min={0} max={30} defaultValue={s.platform_fee_percent}/></label>
-      {msg && <Notice>{msg}</Notice>}
+      <header className="sec-head"><Settings size={18}/><div><h2>Platform settings</h2><p>Only the CEO can change these. Every change is logged.</p></div></header>
+      <div className="grid-2">
+        <label className="field">Minimum hourly pay (R)<input name="min" type="number" step="0.01" min={0} defaultValue={s.min_hourly_zar}/><small>National minimum wage: R30.23/hour from 1 March 2026. Update each March.</small></label>
+        <label className="field">Service fee to businesses (%)<input name="fee" type="number" step="0.5" min={0} max={30} defaultValue={s.platform_fee_percent}/></label>
+      </div>
+      <div className="grid-2">
+        <label className="field">Strikes before suspension<input name="strikes" type="number" min={1} max={10} defaultValue={s.strike_limit ?? 3}/><small>Cancellations and no-shows. The count restarts after each approved appeal.</small></label>
+        <label className="field">Free cancel window (minutes)<input name="grace" type="number" min={0} max={120} defaultValue={s.cancel_grace_minutes ?? 10}/><small>Cancelling this soon after picking up isn’t a strike. 0 turns it off.</small></label>
+      </div>
+      {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
       <button className="btn btn-primary">Save settings</button>
     </form>
+  );
+}
+
+function AppealsAdmin({sb}: {sb: SupabaseClient}) {
+  const [status, setStatus] = useState('pending'), [rows, setRows] = useState<any[] | null>(null), [busy, setBusy] = useState('');
+  const load = () => sb.rpc('admin_appeals', {p_status: status}).then(({data, error}) => { if (error) alert(error.message); setRows(data || []); });
+  useEffect(() => { setRows(null); load(); }, [status]);
+  const decide = async (id: string, approve: boolean, form: HTMLFormElement) => {
+    const response = String(new FormData(form).get('response') || '').trim() || null;
+    setBusy(id);
+    const {error} = await sb.rpc('admin_review_appeal', {p_appeal: id, p_approve: approve, p_response: response});
+    setBusy('');
+    if (error) alert(error.message); else load();
+  };
+  return (
+    <div className="stack">
+      <div className="chip-wrap">{[['pending', 'Waiting'], ['approved', 'Approved'], ['denied', 'Denied'], ['all', 'All']].map(([k, l]) => <button key={k} className={status === k ? 'on' : ''} onClick={() => setStatus(k)}>{l}</button>)}</div>
+      {!rows ? <div className="card-panel center"><span className="spinner"/></div> : !rows.length ? <div className="empty small"><div className="empty-icon"><Gavel size={26}/></div><h3>No appeals here</h3><p>Suspended workers can appeal from their account page.</p></div> : rows.map(a => (
+        <form className="card-panel appeal" key={a.id} onSubmit={e => e.preventDefault()}>
+          <div className="booking-top">
+            <div><h3><a className="link" href={'profile.html?id=' + a.user_id}>{a.full_name || a.email}</a></h3><p className="muted small">{a.email} · {new Date(a.created_at).toLocaleString('en-ZA', {timeZone: tz})} · {a.total_strikes} strikes all-time</p></div>
+            <span className={'pill ' + (a.status === 'pending' ? 'applied' : a.status === 'approved' ? 'accepted' : 'declined')}>{a.status === 'pending' ? 'Waiting' : a.status}</span>
+          </div>
+          {a.suspended_reason && <p className="meta-line"><Ban size={15}/>{a.suspended_reason}</p>}
+          <blockquote className="appeal-text">{a.reason}</blockquote>
+          {a.status === 'pending' ? <>
+            <label className="field">Reply to the worker (optional)<input name="response" maxLength={1000} placeholder="e.g. Approved — please give notice if you can’t make a shift."/></label>
+            <div className="row-gap start">
+              <button className="btn btn-primary btn-sm" disabled={busy === a.id} onClick={e => decide(a.id, true, (e.target as HTMLElement).closest('form')!)}><Check size={15}/>Approve and restore</button>
+              <button className="btn btn-outline btn-sm" disabled={busy === a.id} onClick={e => decide(a.id, false, (e.target as HTMLElement).closest('form')!)}><X size={15}/>Deny</button>
+            </div>
+          </> : a.response && <p className="muted small">Reply: {a.response}</p>}
+        </form>
+      ))}
+    </div>
   );
 }
 
