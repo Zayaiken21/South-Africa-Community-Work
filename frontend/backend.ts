@@ -4,12 +4,16 @@
 import {createClient, type Session, type SupabaseClient} from '@supabase/supabase-js';
 import {useEffect, useState} from 'react';
 
+/** backend-config.json: Supabase address, public key, and optional sign-in methods. */
 type Config = {supabaseUrl: string; supabaseAnonKey: string; google?: boolean};
+/** Optional sign-in methods (Google). */
 let flags: {google: boolean} = {google: false};
 // Optional sign-in methods switched on in backend-config.json ("google": true once Google is set up in Supabase).
 export const authFlags = () => backend().then(() => flags);
+/** The Supabase connection, created once. */
 let clientPromise: Promise<SupabaseClient | null> | null = null;
 
+/** Connects to Supabase (null when backend-config.json is missing). */
 export function backend(): Promise<SupabaseClient | null> {
   if (!clientPromise) {
     clientPromise = fetch('./backend-config.json', {cache: 'no-cache'})
@@ -17,28 +21,65 @@ export function backend(): Promise<SupabaseClient | null> {
       .then((c: Config | null) => {
         if (!c?.supabaseUrl || !c?.supabaseAnonKey || !/^https:\/\//.test(c.supabaseUrl)) return null;
         flags = {google: c.google === true};
-        return createClient(c.supabaseUrl, c.supabaseAnonKey, {auth: {persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce'}});
+        return createClient(c.supabaseUrl, c.supabaseAnonKey, {
+          auth: {persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce'},
+        });
       })
       .catch(() => null);
   }
   return clientPromise;
 }
 
+/** One account's profile row (see the profiles table). */
 export type Profile = {
-  id: string; account_type: 'worker' | 'business'; full_name: string | null; headline: string | null; bio: string | null;
-  skills: string[]; phone: string | null; city: string | null; province: string | null; lat: number | null; lon: number | null;
-  resume_path: string | null; business_name: string | null; business_reg: string | null; payout_ready: boolean; verified: boolean; suspended: boolean;
+  id: string;
+  account_type: 'worker' | 'business';
+  full_name: string | null;
+  headline: string | null;
+  bio: string | null;
+  skills: string[];
+  phone: string | null;
+  city: string | null;
+  province: string | null;
+  lat: number | null;
+  lon: number | null;
+  resume_path: string | null;
+  business_name: string | null;
+  business_reg: string | null;
+  payout_ready: boolean;
+  verified: boolean;
+  suspended: boolean;
   // Dual accounts and detailed profiles (database upgrade 2). Optional so the site still works before the upgrade is run.
-  can_work?: boolean; can_hire?: boolean; active_mode?: 'worker' | 'business';
-  avatar_url?: string | null; theme?: string; languages?: string[]; availability?: string[]; has_transport?: boolean | null;
-  drivers_licence?: string | null; education?: string | null; experience?: Experience[]; business_type?: string | null;
-  business_hours?: string | null; website?: string | null; created_at?: string;
-  strikes?: number; suspended_reason?: string | null;
-  business_bio?: string | null; business_avatar_url?: string | null; banned?: boolean;
+  can_work?: boolean;
+  can_hire?: boolean;
+  active_mode?: 'worker' | 'business';
+  avatar_url?: string | null;
+  theme?: string;
+  languages?: string[];
+  availability?: string[];
+  has_transport?: boolean | null;
+  drivers_licence?: string | null;
+  education?: string | null;
+  experience?: Experience[];
+  business_type?: string | null;
+  business_hours?: string | null;
+  website?: string | null;
+  created_at?: string;
+  strikes?: number;
+  suspended_reason?: string | null;
+  business_bio?: string | null;
+  business_avatar_url?: string | null;
+  banned?: boolean;
   // Update 10: a side can be banned on its own; team accounts open in the CEO view unless they switch it off.
-  work_banned?: boolean; hire_banned?: boolean; ban_reason?: string | null; staff_view?: boolean;
-  work_paused?: boolean; hire_paused?: boolean; pause_reason?: string | null;
+  work_banned?: boolean;
+  hire_banned?: boolean;
+  ban_reason?: string | null;
+  staff_view?: boolean;
+  work_paused?: boolean;
+  hire_paused?: boolean;
+  pause_reason?: string | null;
 };
+/** One past job on a worker's profile. */
 export type Experience = {role: string; place: string; years?: string; note?: string};
 
 // Which modes an account has switched on, with fallbacks for accounts made before upgrade 2.
@@ -54,46 +95,74 @@ export function modes(p: Profile) {
 // Team members see the site as the CEO/admin by default; they can switch their own working/hiring account on.
 export const staffView = (staff: string | null, p: Profile | null) => !!staff && (p?.staff_view ?? true);
 
+/** The signed-in session, profile and team role, kept up to date. */
 export function useAccount() {
-  const [state, setState] = useState<{ready: boolean; sb: SupabaseClient | null; session: Session | null; profile: Profile | null; staff: 'ceo' | 'admin' | null; recovery: boolean}>(
-    {ready: false, sb: null, session: null, profile: null, staff: null, recovery: false});
+  const [state, setState] = useState<{
+    ready: boolean;
+    sb: SupabaseClient | null;
+    session: Session | null;
+    profile: Profile | null;
+    staff: 'ceo' | 'admin' | null;
+    recovery: boolean;
+  }>({ready: false, sb: null, session: null, profile: null, staff: null, recovery: false});
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let alive = true;
     let unsub = () => {};
     backend().then(async sb => {
-      if (!sb) { if (alive) setState(s => ({...s, ready: true})); return; }
+      if (!sb) {
+        if (alive) setState(s => ({...s, ready: true}));
+        return;
+      }
       const load = async (session: Session | null, recovery = false) => {
-        let profile: Profile | null = null, staff: 'ceo' | 'admin' | null = null;
+        let profile: Profile | null = null,
+          staff: 'ceo' | 'admin' | null = null;
         if (session) {
           const [{data: p}, {data: st}] = await Promise.all([
             sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle(),
             sb.from('staff').select('role').eq('user_id', session.user.id).maybeSingle(),
           ]);
-          profile = p as Profile | null; staff = (st?.role as any) ?? null;
+          profile = p as Profile | null;
+          staff = (st?.role as any) ?? null;
         }
         if (alive) setState({ready: true, sb, session, profile, staff, recovery});
       };
       const {data} = await sb.auth.getSession();
       await load(data.session);
-      const sub = sb.auth.onAuthStateChange((event, session) => { load(session, event === 'PASSWORD_RECOVERY'); });
+      const sub = sb.auth.onAuthStateChange((event, session) => {
+        load(session, event === 'PASSWORD_RECOVERY');
+      });
       unsub = () => sub.data.subscription.unsubscribe();
     });
-    return () => { alive = false; unsub(); };
+    return () => {
+      alive = false;
+      unsub();
+    };
   }, [tick]);
   return {...state, reload: () => setTick(t => t + 1)};
 }
 
 // Calls a server function with the signed-in user's token.
-export async function callFunction<T = any>(sb: SupabaseClient, name: string, body: Record<string, unknown>): Promise<T> {
+export async function callFunction<T = any>(
+  sb: SupabaseClient,
+  name: string,
+  body: Record<string, unknown>,
+): Promise<T> {
   const {data, error} = await sb.functions.invoke(name, {body});
   if (error) {
     let message = error.message;
-    try { const ctx: any = (error as any).context; if (ctx?.json) message = (await ctx.json()).error ?? message; } catch { /* keep default */ }
+    try {
+      const ctx: any = (error as any).context;
+      if (ctx?.json) message = (await ctx.json()).error ?? message;
+    } catch {
+      /* keep default */
+    }
     throw new Error(message);
   }
   if ((data as any)?.error) throw new Error((data as any).error);
   return data as T;
 }
 
-export const errorText = (e: unknown) => (e instanceof Error ? e.message : String((e as any)?.message ?? e ?? 'Something went wrong'));
+/** A readable message from any error. */
+export const errorText = (e: unknown) =>
+  e instanceof Error ? e.message : String((e as any)?.message ?? e ?? 'Something went wrong');

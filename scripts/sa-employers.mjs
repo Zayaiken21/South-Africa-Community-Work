@@ -13,9 +13,14 @@
 
 export const knownBoards = [
   // Checked by hand.
-  'gh:ozow', 'lever:Yassir', 'lever:moo', 'lever:dlocal', 'sr:Deloitte6',
+  'gh:ozow',
+  'lever:Yassir',
+  'lever:moo',
+  'lever:dlocal',
+  'sr:Deloitte6',
 ];
 
+/** Company names to try on each hiring system, one per word. */
 export const employers = `
 ozow luno yoco takealot takealotgroup superbalist peachpayments stitch stitchmoney offerzen aerobotics jumo lulalend retailcapital
 tymebank tyme sweepsouth getsmarter 2u mukuru paystack flutterwave andela clickatell payfast valr revio entersekt lightstone
@@ -41,7 +46,9 @@ takealotcareers checkers sixty60 superspar okfoods boxer usave
 truworths edcon jet foschini sportscene totalsports
 gijima eohholdings datatec westcon mustek dataprotect
 ubuntu canonical
-`.split(/\s+/).filter(Boolean);
+`
+  .split(/\s+/)
+  .filter(Boolean);
 
 // Workday career sites: tenant, data centre (the "wd3" in tenant.wd3.myworkdayjobs.com) and site name from the careers page address.
 // sa: true means every job there is in South Africa (used when Workday only says "2 Locations").
@@ -49,7 +56,14 @@ export const workdayBoards = [
   {tenant: 'picknpay', dc: 'wd3', site: 'PNP_Careers', company: 'Pick n Pay', sa: true, category: 'Retail'},
   {tenant: 'absa', dc: 'wd3', site: 'ABSAcareersite', company: 'Absa', category: 'Finance'},
   {tenant: 'oldmutual', dc: 'wd3', site: 'Old_Mutual_Careers', company: 'Old Mutual', category: 'Finance'},
-  {tenant: 'tigerbrands', dc: 'wd103', site: 'TigerBrands', company: 'Tiger Brands', sa: true, category: 'Manufacturing'},
+  {
+    tenant: 'tigerbrands',
+    dc: 'wd103',
+    site: 'TigerBrands',
+    company: 'Tiger Brands',
+    sa: true,
+    category: 'Manufacturing',
+  },
   {tenant: 'mimecast', dc: 'wd5', site: 'Mimecast-Careers', company: 'Mimecast'},
   {tenant: 'avon', dc: 'wd5', site: 'AvonCareers', company: 'Avon'},
   {tenant: 'henryschein', dc: 'wd1', site: 'External_Careers', company: 'Henry Schein'},
@@ -58,7 +72,20 @@ export const workdayBoards = [
 
 // Proper company names where a hiring system only gives its short id.
 export const companyNames = {
-  takealotgroup: 'Takealot', dvt: 'DVT', ozow: 'Ozow', grantthornton: 'Grant Thornton', outsurance: 'OUTsurance', ikhokha: 'iKhokha',
-  offerzen: 'OfferZen', luno: 'Luno', entersekt: 'Entersekt', aerobotics: 'Aerobotics', clickatell: 'Clickatell', bcx: 'BCX',
-  yassir: 'Yassir', dlocal: 'dLocal', moo: 'MOO', deloitte6: 'Deloitte',
+  takealotgroup: 'Takealot',
+  dvt: 'DVT',
+  ozow: 'Ozow',
+  grantthornton: 'Grant Thornton',
+  outsurance: 'OUTsurance',
+  ikhokha: 'iKhokha',
+  offerzen: 'OfferZen',
+  luno: 'Luno',
+  entersekt: 'Entersekt',
+  aerobotics: 'Aerobotics',
+  clickatell: 'Clickatell',
+  bcx: 'BCX',
+  yassir: 'Yassir',
+  dlocal: 'dLocal',
+  moo: 'MOO',
+  deloitte6: 'Deloitte',
 };
