@@ -59,7 +59,7 @@ function App() {
   const banner = useConsentBanner();
   const signedIn = !!acct.session;
   const tab = file === 'index.html' ? 'home' : file === 'find-work.html' ? (mode === 'remote' ? 'online' : 'jobs') : file === 'shifts.html' ? 'shifts'
-    : file === 'saved-jobs.html' ? 'saved' : file === 'support.html' ? 'support' : file === 'account.html' || file === 'admin.html' || file === 'post-job.html' || file === 'profile.html' ? 'account' : 'more';
+    : file === 'saved-jobs.html' ? 'saved' : file === 'support.html' || file === 'help.html' ? 'support' : file === 'account.html' || file === 'admin.html' || file === 'post-job.html' || file === 'profile.html' ? 'account' : 'more';
   return (
     <>
       <header className="topbar">
@@ -101,7 +101,7 @@ function App() {
           : file === 'saved-jobs.html' ? <Saved/>
           : file === 'how-it-works.html' ? <How/>
           : file === 'about.html' ? <About/>
-          : file === 'help.html' ? <Help/>
+          : file === 'help.html' ? <SupportPage/>
           : file === 'privacy.html' ? <Privacy/>
           : file === 'terms.html' ? <Terms/>
           : file === 'offline.html' ? <Offline/>
@@ -112,7 +112,7 @@ function App() {
         <div><a className="brand small" href="index.html"><Logo/><span>community<b>work</b></span></a><p>Opportunity starts in your community.</p></div>
         <nav aria-label="Footer">
           <a href="find-work.html">Find work</a><a href="find-work.html?mode=remote">Online jobs</a><a href="shifts.html">Paid shifts</a><a href="account.html?signup=1&type=business">Hire workers</a><a href="cv-builder.html">CV builder</a>
-          <a href="how-it-works.html">How it works</a><a href="about.html">About</a><a href="support.html">Support</a><a href="rules.html">Community rules</a><a href="help.html">Help</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a>
+          <a href="how-it-works.html">How it works</a><a href="about.html">About</a><a href="support.html">Help & support</a><a href="rules.html">Community rules</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a>
         </nav>
         <small>South Africa · All nine provinces · Some links are sponsored or affiliate links: we may earn a commission, at no cost to you.</small>
       </footer>
@@ -134,15 +134,11 @@ function App() {
           <div className="menu-list">
             {install && <button onClick={() => { setMore(false); install(); }}><Download size={20}/>Install the app</button>}
             {acct.staff && <a href="admin.html"><ShieldCheck size={20}/>{acct.staff === 'ceo' ? 'CEO dashboard' : 'Admin dashboard'}</a>}
-            <a href="account.html"><UserRound size={20}/>{signedIn ? 'My account' : 'Sign in or create account'}</a>
             {!signedIn && <a href="account.html?signup=1&type=business"><Building2 size={20}/>Hire workers for shifts</a>}
             <a href="cv-builder.html"><FileUser size={20}/>Build your CV</a>
             <a href="how-it-works.html"><BriefcaseBusiness size={20}/>How it works</a>
             <a href="about.html"><Info size={20}/>About</a>
-            <a href="support.html"><LifeBuoy size={20}/>Support · ask Randy</a>
             <a href="rules.html"><BookOpen size={20}/>Community rules</a>
-            <a href="find-work.html?mode=remote"><Globe size={20}/>Online jobs</a>
-            <a href="help.html"><CircleHelp size={20}/>Help & safety</a>
             <a href="privacy.html"><Lock size={20}/>Privacy</a>
             <a href="terms.html"><FileText size={20}/>Terms</a>
           </div>
@@ -184,7 +180,7 @@ function HirePage() {
           <Wallet size={22}/>
           <h2>Why escrow?</h2>
           <p>Workers know the money is there before they travel, and you only release it once the hours are confirmed. If something goes wrong, our team reviews it before any money moves.</p>
-          <a className="link" href="help.html">Questions? <ArrowRight size={15}/></a>
+          <a className="link" href="support.html">Questions? <ArrowRight size={15}/></a>
         </aside>
       </div>
     </div>
@@ -254,7 +250,7 @@ function Detail() {
                 <p className="contact-value">{job.contact}</p>
                 <p className="hint-box">Contacting the poster doesn’t book the shift. Agree on the work, pay, hours and exact address first.</p>
                 <a className="link" href="cv-builder.html"><FileUser size={15}/>No CV yet? Build one free</a>
-                <a className="link" href="help.html#safety">Tips for staying safe</a>
+                <a className="link" href="support.html#safety">Tips for staying safe</a>
               </aside>
             </div>
           </>
@@ -343,37 +339,6 @@ function About() {
         <section className="card-panel"><h2>Every city. Every town.</h2><p className="prose-text">Search works in all nine provinces. Community posts use the workplace’s exact position, so towns don’t need to be on a preset list. In-person and online listings from established job boards fill the gaps while local posts grow.</p><a className="btn btn-primary" href="find-work.html">Explore jobs</a></section>
         <section className="card-panel"><h2>Clear from the start.</h2><p className="prose-text">Community posts show pay, hours and location up front. Listings from other job boards link to the original advert, where you apply.</p><p className="hint-box">We’re an early-stage platform. We don’t claim business partnerships or guarantee employment.</p></section>
       </div>
-    </div>
-  );
-}
-
-const faqs: [string, string][] = [
-  ['How does the app find my area?', 'When you open it, the app asks your phone or browser for your location. If that’s blocked, slow or outside South Africa, it estimates your area from your network. You can always tap your area at the top to choose a city or search an address.'],
-  ['My location isn’t working.', 'Allow location for this site or app in your phone settings, then tap “Use my current location”. Or just tap your city — that works without GPS.'],
-  ['Where do the online and in-person jobs come from?', 'Besides shifts posted here, in-person jobs come straight from South African employers’ own careers pages, and online jobs from public job boards such as Remotive, Jobicy, Himalayas, Remote OK, Working Nomads and We Work Remotely. Tap Apply to open the original advert and apply there. Listings refresh several times a day.'],
-  ['How do I make a CV?', 'Open CV builder from the menu. Fill in your details, choose a template and colour, then download a PDF or Word file. Everything stays on your device, and you can export a save file to keep editing later.'],
-  ['Why am I seeing no jobs?', 'Your filters may be too narrow. Choose “Anywhere in SA”, clear the category or search, and check the In person and Online filters on the Jobs page.'],
-  ['How is distance calculated?', 'It’s the straight-line distance between your area and the workplace. Travel by road will be longer.'],
-  ['How do hourly and total pay work?', 'Hourly pay is multiplied by the hours to estimate the shift total. Total-job pay is divided by the hours when filtering by hourly pay.'],
-  ['How do shifts and pay work?', 'A business posts a shift with an hourly rate. You apply with your profile and CV. If they book you on an escrow shift, they pay the full amount to TradeSafe, a South African escrow company, before you start. After the shift the hours are confirmed and the money is paid into your bank account. Cash shifts are paid in person by the business.'],
-  ['Can I be paid with PayPal, Wise or Cash App?', 'Escrow pay goes to a South African bank account, because that’s how licensed escrow works here. Cash App isn’t available in South Africa. If you and the business agree, cash shifts are paid in person.'],
-  ['Who can see my CV?', 'Only you, the businesses you apply to, and our support team. Delete or replace it in your account any time.'],
-  ['What if there’s a problem with a shift?', 'Tap “Report a problem” on the shift. The money stays held while our team looks at what happened, then it’s released to the worker or refunded to the business.'],
-  ['How do I report a problem?', 'Use the issue tracker below for technical problems. Don’t post bank details, ID documents or private addresses in a public issue.'],
-];
-
-function Help() {
-  return (
-    <div className="page reading">
-      <PageHead tag="Help & safety" title="A little help along the way."/>
-      {faqs.map(([q, a]) => <details className="faq" key={q}><summary>{q}</summary><p>{a}</p></details>)}
-      <AdSlot spot="article"/>
-      <section className="card-panel" id="safety">
-        <ShieldCheck size={22}/>
-        <h2>Before you agree to work</h2>
-        <p className="prose-text">Confirm who is hiring, the exact workplace, duties, hours and pay. Never pay anyone to get a job, and never share bank logins or ID documents through a job ad. If something feels wrong, stop and check the employer independently.</p>
-        <a className="btn btn-outline" href="https://github.com/Zayaiken21/South-Africa-Community-Work/issues" target="_blank" rel="noreferrer">Report a technical issue <ArrowUpRight size={15}/></a>
-      </section>
     </div>
   );
 }
