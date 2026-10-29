@@ -1,9 +1,72 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {distanceKm,eligible,validLocation,validateJob} from '../lib/jobs.ts';
-const valid=()=>({title:'Kitchen assistant',description:'Prepare food and clean workstations.',business:'Example employer',city:'Johannesburg',province:'Gauteng',category:'Hospitality',pay:65,payType:'hour',hours:8,latitude:-26.2041,longitude:28.0473,radius:25,start:new Date(Date.now()+86400000).toISOString(),contact:'jobs@example.test'});
-test('Haversine uses kilometres and is symmetric',()=>{assert.equal(distanceKm(-26,28,-26,28),0);const d=distanceKm(-26.2041,28.0473,-33.9249,18.4241);assert.ok(d>1250&&d<1270);assert.equal(d,distanceKm(-33.9249,18.4241,-26.2041,28.0473));});
-test('both worker and employer radii must admit the job',()=>{assert.ok(eligible(25,25,25));assert.ok(!eligible(25.01,25,200));assert.ok(!eligible(10.01,200,10));assert.ok(eligible(0,1,1));});
-test('valid jobs normalize their SAST start time',()=>{const j=valid();j.start='2099-10-20T09:00:00+02:00';const output=validateJob(j);assert.equal(output.start,'2099-10-20T07:00:00.000Z');assert.equal(output.pay,65);});
-test('reject missing text, nonfinite amounts, negative pay, excessive hours and expired dates',()=>{for(const patch of [{title:''},{description:''},{pay:NaN},{pay:-5},{hours:0},{hours:25},{radius:201},{radius:0},{start:'2020-01-01'},{province:'Unknown'},{payType:'month'},{latitude:40},{longitude:NaN}]) assert.throws(()=>validateJob({...valid(),...patch}));});
-test('all nine provinces are allowed and location checks reject invalid data',()=>{for(const province of ['Eastern Cape','Free State','Gauteng','KwaZulu-Natal','Limpopo','Mpumalanga','North West','Northern Cape','Western Cape']) assert.doesNotThrow(()=>validateJob({...valid(),province}));assert.ok(!validLocation(null,null));assert.ok(!validLocation(NaN,28));});
+import {distanceKm, eligible, validLocation, validateJob} from '../lib/jobs.ts';
+const valid = () => ({
+  title: 'Kitchen assistant',
+  description: 'Prepare food and clean workstations.',
+  business: 'Example employer',
+  city: 'Johannesburg',
+  province: 'Gauteng',
+  category: 'Hospitality',
+  pay: 65,
+  payType: 'hour',
+  hours: 8,
+  latitude: -26.2041,
+  longitude: 28.0473,
+  radius: 25,
+  start: new Date(Date.now() + 86400000).toISOString(),
+  contact: 'jobs@example.test',
+});
+test('Haversine uses kilometres and is symmetric', () => {
+  assert.equal(distanceKm(-26, 28, -26, 28), 0);
+  const d = distanceKm(-26.2041, 28.0473, -33.9249, 18.4241);
+  assert.ok(d > 1250 && d < 1270);
+  assert.equal(d, distanceKm(-33.9249, 18.4241, -26.2041, 28.0473));
+});
+test('both worker and employer radii must admit the job', () => {
+  assert.ok(eligible(25, 25, 25));
+  assert.ok(!eligible(25.01, 25, 200));
+  assert.ok(!eligible(10.01, 200, 10));
+  assert.ok(eligible(0, 1, 1));
+});
+test('valid jobs normalize their SAST start time', () => {
+  const j = valid();
+  j.start = '2099-10-20T09:00:00+02:00';
+  const output = validateJob(j);
+  assert.equal(output.start, '2099-10-20T07:00:00.000Z');
+  assert.equal(output.pay, 65);
+});
+test('reject missing text, nonfinite amounts, negative pay, excessive hours and expired dates', () => {
+  for (const patch of [
+    {title: ''},
+    {description: ''},
+    {pay: NaN},
+    {pay: -5},
+    {hours: 0},
+    {hours: 25},
+    {radius: 201},
+    {radius: 0},
+    {start: '2020-01-01'},
+    {province: 'Unknown'},
+    {payType: 'month'},
+    {latitude: 40},
+    {longitude: NaN},
+  ])
+    assert.throws(() => validateJob({...valid(), ...patch}));
+});
+test('all nine provinces are allowed and location checks reject invalid data', () => {
+  for (const province of [
+    'Eastern Cape',
+    'Free State',
+    'Gauteng',
+    'KwaZulu-Natal',
+    'Limpopo',
+    'Mpumalanga',
+    'North West',
+    'Northern Cape',
+    'Western Cape',
+  ])
+    assert.doesNotThrow(() => validateJob({...valid(), province}));
+  assert.ok(!validLocation(null, null));
+  assert.ok(!validLocation(NaN, 28));
+});

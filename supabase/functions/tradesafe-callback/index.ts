@@ -7,7 +7,11 @@
 import {admin} from '../_shared/auth.ts';
 import {mapState, transactionState} from '../_shared/tradesafe.ts';
 
-const TRADESAFE_IPS = (Deno.env.get('TRADESAFE_CALLBACK_IPS') ?? '13.244.170.245,13.244.43.204,13.244.48.16,13.244.147.116').split(',').map(s => s.trim());
+const TRADESAFE_IPS = (
+  Deno.env.get('TRADESAFE_CALLBACK_IPS') ?? '13.244.170.245,13.244.43.204,13.244.48.16,13.244.147.116'
+)
+  .split(',')
+  .map(s => s.trim());
 
 function safeEqual(a: string, b: string) {
   if (!a || !b || a.length !== b.length) return false;
@@ -35,11 +39,15 @@ Deno.serve(async req => {
   const {data: p} = await db.from('payments').select('id, state').eq('provider_transaction_id', id).maybeSingle();
   if (!p) return ok(); // not one of ours
 
-  const live = await transactionState(id);           // trust TradeSafe's API, not the callback body
+  const live = await transactionState(id); // trust TradeSafe's API, not the callback body
   const next = mapState(live.state);
   if (!next || next === p.state) return ok();
   if (p.state === 'released' && next !== 'released') return ok(); // never move backwards from released
-  const patch: Record<string, unknown> = {state: next, provider_state: live.state, updated_at: new Date().toISOString()};
+  const patch: Record<string, unknown> = {
+    state: next,
+    provider_state: live.state,
+    updated_at: new Date().toISOString(),
+  };
   if (next === 'released') patch.released_at = new Date().toISOString();
   await db.from('payments').update(patch).eq('id', p.id);
   return ok();
