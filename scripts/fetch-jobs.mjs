@@ -59,7 +59,8 @@ const rules = [
   ['Manufacturing', /\b(production|factory|machine operator|assembl|manufactur|packaging operator|quality control|cnc|operator)\b/i],
   ['Engineering', /\b(engineer|engineering|technician|draughtsman|drafter|millwright|instrumentation|electrician|fitter|turner|boilermaker|mechanic)\b/i],
   ['Construction', /\b(construction|builder|plumber|artisan|welder|carpent|bricklay|site manager|civil|quantity surveyor|painter|tiler|handyman|maintenance)\b/i],
-  ['Hospitality', /\b(chef|cook|waiter|waitress|barista|hotel|kitchen|restaurant|hospitality|bartender|housekeep|front of house|lodge|guest)\b/i],
+  ['Retail', /\b(butcher(y)?|baker(y)?|bakers|deli\b|blockman|shelf ?pack|checkout|cashier|fruit ?& ?veg|general merchandise|clothing|floor sales|supermarket|hypermarket|stores?\b.*manager|trainee manager|visual merchandis|liquor)/i],
+  ['Hospitality', /\b(chef|cook|sushi|waiter|waitress|barista|hotel|kitchen|restaurant|hospitality|bartender|housekeep|front of house|lodge|guest)\b/i],
   ['Retail', /\b(retail|cashier|store|shop|merchandis|sales assistant|till|branch manager)\b/i],
   ['Cleaning', /\b(clean|domestic|janitor|hygiene|housekeeper|gardener)\b/i],
   ['Events', /\b(event|promoter|promotion|usher|brand ambassador)\b/i],
@@ -133,9 +134,11 @@ function located(location, lat, lon) {
 // ---------- In person (South Africa) ----------
 
 const US_PLACE = /,\s*[A-Z]{2}$|\b(united states|usa|u\.s\.)\b/i;
+const FOREIGN = /\b(cayman|malaysia|penang|singapore|united kingdom|england|london|ireland|dublin|australia|sydney|canada|toronto|india|bangalore|bengaluru|germany|berlin|netherlands|amsterdam|france|paris|spain|portugal|lisbon|nigeria|lagos|kenya|nairobi|ghana|egypt|cairo|morocco|philippines|manila|brazil|mexico|poland|romania|uae|dubai|mauritius|botswana|namibia|zambia|zimbabwe)\b/i;
 function isSouthAfrican(location) {
   const t = String(location || '');
   if (!t || US_PLACE.test(t)) return false;
+  if (FOREIGN.test(t) && !/south africa/i.test(t)) return false;
   return /south africa|\bza\b/i.test(t) || !!placeFor(t);
 }
 
