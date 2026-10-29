@@ -14,7 +14,7 @@ bar. When the website changes, the app changes too — you only upload a new bun
 | Website-ownership file | `play-store/site-root/.well-known/assetlinks.json` |
 | Store text, data-safety and rating answers | `play-store/listing.md` |
 | Icon and feature graphic | `play-store/play-icon-512.png`, `play-store/feature-graphic-1024x500.png` |
-| Screenshots | `assets/screenshots/` (or take your own from the installed app) |
+| Phone screenshots (PNG, 1080 × 1920) | `play-store/screenshots/` |
 
 Package id: **`communityworksouthafrica.app`** — permanent once published.
 
