@@ -30,6 +30,7 @@ import {
   Laptop,
   FileUser,
   CalendarDays,
+  LogOut,
   UserRound,
   Building2,
   Wallet,
@@ -41,8 +42,7 @@ import {AccountPage, AdminPage, ConsentBanner, ShiftsPage} from './marketplace';
 import {Avatar, ProfilePage} from './profile';
 import {SupportPage} from './support';
 import {RulesPage} from './rules';
-import {modes, staffView} from './backend';
-import {useAccount} from './backend';
+import {modes, staffView, useAccount} from './backend';
 import {consent, gaConfigured, startTracking} from './analytics';
 import {
   API,
@@ -59,6 +59,8 @@ import './app.css';
 
 /** The current page's file name; decides which page to show. */
 const file = window.location.pathname.split('/').pop() || 'index.html';
+/** Worker and business pages that CEO view doesn't show (the team member is sent to the dashboard instead). */
+const ceoHidden = ['shifts.html', 'saved-jobs.html', 'support.html', 'help.html', 'post-job.html'];
 /** ?mode=remote on Find work shows online jobs. */
 const mode = new URLSearchParams(window.location.search).get('mode');
 
@@ -154,6 +156,11 @@ function App() {
   const signedIn = !!acct.session;
   const ceoView = staffView(acct.staff, acct.profile);
   const teamLabel = acct.staff === 'ceo' ? 'CEO' : 'Admin';
+  // CEO view shows only the dashboard and the job pages (to check how affiliate ads look). Worker and business pages
+  // send the team member back to the dashboard; "Use my own account" in the menu switches CEO view off.
+  useEffect(() => {
+    if (ceoView && ceoHidden.includes(file)) location.replace('account.html');
+  }, [ceoView]);
   const tab =
     file === 'index.html'
       ? 'home'
@@ -187,17 +194,25 @@ function App() {
           <a className={tab === 'online' ? 'on' : ''} href="find-work.html?mode=remote">
             Online jobs
           </a>
-          <a className={tab === 'shifts' ? 'on' : ''} href="shifts.html">
-            Shifts
-          </a>
-          <a className={tab === 'saved' ? 'on' : ''} href="saved-jobs.html">
-            Saved
-          </a>
-          <a href="cv-builder.html">CV builder</a>
-          <a href="how-it-works.html">How it works</a>
-          <a className={tab === 'support' ? 'on' : ''} href="support.html">
-            Support
-          </a>
+          {ceoView ? (
+            <a className={tab === 'account' ? 'on' : ''} href="account.html">
+              {teamLabel} dashboard
+            </a>
+          ) : (
+            <>
+              <a className={tab === 'shifts' ? 'on' : ''} href="shifts.html">
+                Shifts
+              </a>
+              <a className={tab === 'saved' ? 'on' : ''} href="saved-jobs.html">
+                Saved
+              </a>
+              <a href="cv-builder.html">CV builder</a>
+              <a href="how-it-works.html">How it works</a>
+              <a className={tab === 'support' ? 'on' : ''} href="support.html">
+                Support
+              </a>
+            </>
+          )}
         </nav>
         <div className="top-actions">
           {install && (
@@ -296,19 +311,21 @@ function App() {
           </a>
           <p>Opportunity starts in your community.</p>
         </div>
-        <nav aria-label="Footer">
-          <a href="find-work.html">Find work</a>
-          <a href="find-work.html?mode=remote">Online jobs</a>
-          <a href="shifts.html">Paid shifts</a>
-          <a href="account.html?signup=1&type=business">Hire workers</a>
-          <a href="cv-builder.html">CV builder</a>
-          <a href="how-it-works.html">How it works</a>
-          <a href="about.html">About</a>
-          <a href="support.html">Help & support</a>
-          <a href="rules.html">Community rules</a>
-          <a href="privacy.html">Privacy</a>
-          <a href="terms.html">Terms</a>
-        </nav>
+        {!ceoView && (
+          <nav aria-label="Footer">
+            <a href="find-work.html">Find work</a>
+            <a href="find-work.html?mode=remote">Online jobs</a>
+            <a href="shifts.html">Paid shifts</a>
+            <a href="account.html?signup=1&type=business">Hire workers</a>
+            <a href="cv-builder.html">CV builder</a>
+            <a href="how-it-works.html">How it works</a>
+            <a href="about.html">About</a>
+            <a href="support.html">Help & support</a>
+            <a href="rules.html">Community rules</a>
+            <a href="privacy.html">Privacy</a>
+            <a href="terms.html">Terms</a>
+          </nav>
+        )}
         <small>
           South Africa · All nine provinces · Some links are sponsored or affiliate links: we may earn a commission, at
           no cost to you.
@@ -317,30 +334,47 @@ function App() {
 
       {adPages.includes(file) && <HangingOffer />}
 
-      <nav className="tabbar" aria-label="App">
-        <a className={tab === 'home' || tab === 'jobs' || tab === 'online' ? 'on' : ''} href="index.html">
-          <House size={22} />
-          <span>Jobs</span>
-        </a>
-        <a className={tab === 'saved' ? 'on' : ''} href="saved-jobs.html">
-          <Bookmark size={22} />
-          <span>Saved</span>
-        </a>
-        <a className={'post' + (tab === 'shifts' ? ' on' : '')} href="shifts.html">
-          <span className="post-fab">
-            <CalendarDays size={24} />
-          </span>
-          <span>Shifts</span>
-        </a>
-        <a className={tab === 'support' ? 'on' : ''} href="support.html">
-          <LifeBuoy size={22} />
-          <span>Support</span>
-        </a>
-        <a className={tab === 'account' ? 'on' : ''} href="account.html">
-          {ceoView ? <ShieldCheck size={22} /> : <UserRound size={22} />}
-          <span>{ceoView ? teamLabel : signedIn ? 'Account' : 'Sign in'}</span>
-        </a>
-      </nav>
+      {ceoView ? (
+        <nav className="tabbar three" aria-label="App">
+          <a className={tab === 'home' || tab === 'jobs' ? 'on' : ''} href="index.html">
+            <House size={22} />
+            <span>Jobs</span>
+          </a>
+          <a className={tab === 'online' ? 'on' : ''} href="find-work.html?mode=remote">
+            <Globe size={22} />
+            <span>Online</span>
+          </a>
+          <a className={tab === 'account' ? 'on' : ''} href="account.html">
+            <ShieldCheck size={22} />
+            <span>{teamLabel}</span>
+          </a>
+        </nav>
+      ) : (
+        <nav className="tabbar" aria-label="App">
+          <a className={tab === 'home' || tab === 'jobs' || tab === 'online' ? 'on' : ''} href="index.html">
+            <House size={22} />
+            <span>Jobs</span>
+          </a>
+          <a className={tab === 'saved' ? 'on' : ''} href="saved-jobs.html">
+            <Bookmark size={22} />
+            <span>Saved</span>
+          </a>
+          <a className={'post' + (tab === 'shifts' ? ' on' : '')} href="shifts.html">
+            <span className="post-fab">
+              <CalendarDays size={24} />
+            </span>
+            <span>Shifts</span>
+          </a>
+          <a className={tab === 'support' ? 'on' : ''} href="support.html">
+            <LifeBuoy size={22} />
+            <span>Support</span>
+          </a>
+          <a className={tab === 'account' ? 'on' : ''} href="account.html">
+            <UserRound size={22} />
+            <span>{signedIn ? 'Account' : 'Sign in'}</span>
+          </a>
+        </nav>
+      )}
 
       <ConsentBanner show={banner.show} onChoose={banner.choose} />
 
@@ -358,42 +392,64 @@ function App() {
                 Install the app
               </button>
             )}
+            {ceoView && acct.sb && (
+              <>
+                <button
+                  onClick={async () => {
+                    const {error} = await acct.sb!.rpc('set_staff_view', {p_on: false});
+                    if (error) alert(error.message);
+                    else location.href = 'account.html';
+                  }}
+                >
+                  <UserRound size={20} />
+                  Use my own account
+                </button>
+                <button onClick={() => acct.sb!.auth.signOut().then(() => location.replace('account.html'))}>
+                  <LogOut size={20} />
+                  Sign out
+                </button>
+              </>
+            )}
             {acct.staff && !ceoView && (
               <a href="admin.html">
                 <ShieldCheck size={20} />
                 {acct.staff === 'ceo' ? 'CEO dashboard' : 'Admin dashboard'}
               </a>
             )}
-            {!signedIn && (
-              <a href="account.html?signup=1&type=business">
-                <Building2 size={20} />
-                Hire workers for shifts
-              </a>
+            {!ceoView && (
+              <>
+                {!signedIn && (
+                  <a href="account.html?signup=1&type=business">
+                    <Building2 size={20} />
+                    Hire workers for shifts
+                  </a>
+                )}
+                <a href="cv-builder.html">
+                  <FileUser size={20} />
+                  Build your CV
+                </a>
+                <a href="how-it-works.html">
+                  <BriefcaseBusiness size={20} />
+                  How it works
+                </a>
+                <a href="about.html">
+                  <Info size={20} />
+                  About
+                </a>
+                <a href="rules.html">
+                  <BookOpen size={20} />
+                  Community rules
+                </a>
+                <a href="privacy.html">
+                  <Lock size={20} />
+                  Privacy
+                </a>
+                <a href="terms.html">
+                  <FileText size={20} />
+                  Terms
+                </a>
+              </>
             )}
-            <a href="cv-builder.html">
-              <FileUser size={20} />
-              Build your CV
-            </a>
-            <a href="how-it-works.html">
-              <BriefcaseBusiness size={20} />
-              How it works
-            </a>
-            <a href="about.html">
-              <Info size={20} />
-              About
-            </a>
-            <a href="rules.html">
-              <BookOpen size={20} />
-              Community rules
-            </a>
-            <a href="privacy.html">
-              <Lock size={20} />
-              Privacy
-            </a>
-            <a href="terms.html">
-              <FileText size={20} />
-              Terms
-            </a>
           </div>
         </Sheet>
       )}

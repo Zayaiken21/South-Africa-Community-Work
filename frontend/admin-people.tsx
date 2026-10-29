@@ -40,6 +40,7 @@ import {
 import {Avatar} from './profile';
 import {Sheet} from './JobsView';
 import {OfferCard, type Offer} from './ads';
+import {ONLINE_CHANNEL, type OnlinePerson} from './analytics';
 import {browseCategories} from './catalog';
 
 /** "5 min ago", "2 h ago", or a date. */
@@ -701,57 +702,248 @@ const pageName = (path?: string | null) => {
   return PAGE[p] || p;
 };
 
-/** Live tab: visitors in the last 30 minutes and their latest actions. */
-export function LiveFeed({
-  data,
-}: {
-  data: {
-    active_visitors: number;
-    events: number;
-    recent: {at: string; type: string; path: string | null; target: string | null}[];
-  };
-}) {
+/** One event in the activity feed, with who did it (signed-in people) or a short visitor code (guests). */
+type LiveEvent = {
+  at: string;
+  type: string;
+  path: string | null;
+  target: string | null;
+  user_id: string | null;
+  visitor: string;
+  name: string | null;
+  business: string | null;
+  email: string | null;
+  mode: string | null;
+  staff_role: string | null;
+};
+type LiveData = {
+  active_visitors: number;
+  signed_in?: number;
+  events: number;
+  recent: LiveEvent[];
+  people?: {
+    user_id: string;
+    last_at: string;
+    actions: number;
+    last_path: string | null;
+    name: string | null;
+    business: string | null;
+    email: string | null;
+  }[];
+};
+type Named = {
+  id: string;
+  name: string | null;
+  business: string | null;
+  email: string | null;
+  mode: string | null;
+  staff_role: string | null;
+};
+
+/** How a signed-in person is shown: their name, then their business, then their email. */
+const who = (p: {name?: string | null; business?: string | null; email?: string | null}) =>
+  [p.name, p.business && `(${p.business})`].filter(Boolean).join(' ') || p.email || 'Signed-in member';
+
+/** People on the site this moment, from the live "online now" channel every open page joins. */
+function useOnlineNow(sb: SupabaseClient) {
+  const [people, setPeople] = useState<{key: string; info: OnlinePerson}[]>([]);
+  useEffect(() => {
+    const ch = sb.channel(ONLINE_CHANNEL);
+    const sync = () =>
+      setPeople(
+        Object.entries(ch.presenceState<OnlinePerson>()).map(([key, list]) => ({key, info: list[list.length - 1]})),
+      );
+    ch.on('presence', {event: 'sync'}, sync).subscribe();
+    return () => {
+      sb.removeChannel(ch);
+    };
+  }, []);
+  return people;
+}
+
+const WINDOWS: [number, string][] = [
+  [30, '30 min'],
+  [240, '4 hours'],
+  [1440, '24 hours'],
+];
+
+/** Live tab: who is online now, and who did what in the chosen time window. */
+export function LiveFeed({sb}: {sb: SupabaseClient}) {
+  const [minutes, setMinutes] = useState(30);
+  const [data, setData] = useState<LiveData | null>(null),
+    [err, setErr] = useState('');
+  const online = useOnlineNow(sb);
+  const [names, setNames] = useState<Record<string, Named>>({});
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      sb.rpc('admin_live', {p_minutes: minutes}).then(({data, error}) => {
+        if (!alive) return;
+        if (error) setErr(error.message);
+        else {
+          setErr('');
+          setData(data as LiveData);
+        }
+      });
+    load();
+    const t = setInterval(load, 15000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [minutes]);
+  // Names for signed-in people who are online right now.
+  const ids = online.map(o => o.info.userId).filter((x): x is string => !!x && !names[x]);
+  useEffect(() => {
+    if (!ids.length) return;
+    sb.rpc('admin_people_names', {p_ids: ids}).then(
+      ({data}) => data && setNames(n => ({...n, ...Object.fromEntries((data as Named[]).map(p => [p.id, p]))})),
+    );
+  }, [ids.join()]);
+  const signedInNow = online.filter(o => o.info.signedIn).length;
+  const label = WINDOWS.find(w => w[0] === minutes)?.[1] || `${minutes} min`;
+
   return (
     <div className="stack">
-      <div className="stat-grid two">
-        <div className="tile big">
-          <span>
-            <Activity size={15} /> Active in the last 30 min
-          </span>
-          <strong>{data.active_visitors.toLocaleString('en-ZA')}</strong>
-          <small>people on the site</small>
-        </div>
-        <div className="tile big">
-          <span>Actions</span>
-          <strong>{data.events.toLocaleString('en-ZA')}</strong>
-          <small>refreshes every 15 seconds</small>
-        </div>
-      </div>
-      <section className="card-panel feed">
-        <h3>Latest activity</h3>
-        {!data.recent?.length ? (
-          <p className="muted">Nothing in the last 30 minutes.</p>
+      <section className="card-panel online-now">
+        <header className="sec-head">
+          <span className="live-pulse" />
+          <div>
+            <h2>Online now: {online.length.toLocaleString('en-ZA')}</h2>
+            <p>
+              {signedInNow} signed in · {online.length - signedInNow} guests · updates instantly
+            </p>
+          </div>
+        </header>
+        {!online.length ? (
+          <p className="muted">Nobody is on the site right now.</p>
         ) : (
-          <ol className="feed-list">
-            {data.recent.map((e, i) => {
-              const [label, Icon, tone] = EVENT[e.type] || [e.type.replace(/_/g, ' '), Activity, 'grey'];
-              const detail = e.target && !/^[0-9a-f-]{36}$/i.test(e.target) ? e.target : '';
-              return (
-                <li key={i}>
-                  <span className={'feed-ic ' + tone}>
-                    <Icon size={15} />
-                  </span>
-                  <div>
-                    <strong>{label}</strong>
-                    <small>{[pageName(e.path), detail].filter(Boolean).join(' · ') || '—'}</small>
-                  </div>
-                  <time>{ago(e.at)}</time>
-                </li>
-              );
-            })}
-          </ol>
+          <ul className="online-list">
+            {online
+              .slice()
+              .sort((a, b) => Number(b.info.signedIn) - Number(a.info.signedIn))
+              .slice(0, 60)
+              .map(o => {
+                const n = o.info.userId ? names[o.info.userId] : undefined;
+                return (
+                  <li key={o.key}>
+                    <span className={'dot ' + (o.info.signedIn ? 'member' : 'guest')} />
+                    <strong>
+                      {o.info.signedIn ? (n ? who(n) : 'Signed-in member') : `Guest ${o.key.slice(0, 4).toUpperCase()}`}
+                    </strong>
+                    {n?.staff_role && <em className="pill team">{n.staff_role === 'ceo' ? 'CEO' : 'Admin'}</em>}
+                    <small>
+                      {pageName('/' + o.info.path)} · here {ago(o.info.since)}
+                    </small>
+                  </li>
+                );
+              })}
+          </ul>
         )}
       </section>
+
+      <div className="chip-wrap">
+        {WINDOWS.map(([m, l]) => (
+          <button
+            key={m}
+            className={minutes === m ? 'on' : ''}
+            onClick={() => {
+              setData(null);
+              setMinutes(m);
+            }}
+          >
+            Last {l}
+          </button>
+        ))}
+      </div>
+      {err && (
+        <Note kind="error">
+          {err.includes('admin_live')
+            ? 'Run the latest database update (supabase/run-updates.sql) to see who did what.'
+            : err}
+        </Note>
+      )}
+      {!data ? (
+        <div className="card-panel center">
+          <span className="spinner" />
+        </div>
+      ) : (
+        <>
+          <div className="stat-grid">
+            <div className="tile big">
+              <span>
+                <Activity size={15} /> Visitors
+              </span>
+              <strong>{data.active_visitors.toLocaleString('en-ZA')}</strong>
+              <small>in the last {label}</small>
+            </div>
+            <div className="tile big">
+              <span>Signed in</span>
+              <strong>{(data.signed_in ?? 0).toLocaleString('en-ZA')}</strong>
+              <small>members active</small>
+            </div>
+            <div className="tile big">
+              <span>Actions</span>
+              <strong>{data.events.toLocaleString('en-ZA')}</strong>
+              <small>refreshes every 15 seconds</small>
+            </div>
+          </div>
+          {!!data.people?.length && (
+            <section className="card-panel feed">
+              <h3>Members active in the last {label}</h3>
+              <ol className="feed-list">
+                {data.people.map(p => (
+                  <li key={p.user_id}>
+                    <span className="feed-ic green">
+                      <UserRound size={15} />
+                    </span>
+                    <div>
+                      <strong>{who(p)}</strong>
+                      <small>
+                        {p.email} · {p.actions} action{p.actions === 1 ? '' : 's'} · last on{' '}
+                        {pageName(p.last_path) || '—'}
+                      </small>
+                    </div>
+                    <time>{ago(p.last_at)}</time>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+          <section className="card-panel feed">
+            <h3>Who did what</h3>
+            {!data.recent?.length ? (
+              <p className="muted">Nothing in the last {label}.</p>
+            ) : (
+              <ol className="feed-list">
+                {data.recent.map((e, i) => {
+                  const [what, Icon, tone] = EVENT[e.type] || [e.type.replace(/_/g, ' '), Activity, 'grey'];
+                  const detail = e.target && !/^[0-9a-f-]{36}$/i.test(e.target) ? e.target : '';
+                  const person = e.user_id ? who(e) : e.visitor ? `Guest ${e.visitor}` : 'A visitor';
+                  return (
+                    <li key={i}>
+                      <span className={'feed-ic ' + tone}>
+                        <Icon size={15} />
+                      </span>
+                      <div>
+                        <strong>
+                          <span className={e.user_id ? 'who member' : 'who'}>{person}</span>{' '}
+                          {what.charAt(0).toLowerCase() + what.slice(1)}
+                        </strong>
+                        <small>
+                          {[pageName(e.path), detail].filter(Boolean).join(' · ') || '—'}
+                          {e.staff_role ? ' · team' : ''}
+                        </small>
+                      </div>
+                      <time>{ago(e.at)}</time>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </section>
+        </>
+      )}
     </div>
   );
 }

@@ -1,71 +1,73 @@
 # Publishing Community Work on Google Play
 
-The app is a Progressive Web App (PWA): it has a web manifest, a service worker with an offline page, and app icons. Google Play accepts PWAs packaged as a **Trusted Web Activity (TWA)** — a small Android app that opens the site full-screen in Chrome, with no browser bar. When you update the site on GitHub, the Play app updates too; you only rebuild the Android package to change the icon, name or package settings.
+The Play app is a **Trusted Web Activity**: a small Android app that opens the website full-screen, without a browser
+bar. When the website changes, the app changes too — you only upload a new bundle to change the name, icon or version.
 
-## What’s already in this repo
+## What's ready
 
-| File | Purpose |
-| --- | --- |
-| `manifest.webmanifest` | App name, icons, colours, start page, shortcuts |
-| `sw.js` | Offline support and fast loading |
-| `offline.html` | Shown when there’s no connection |
-| `assets/icons/` | 192/512 icons, maskable icon, Apple touch icon, share image |
-| `play-store/play-icon-512.png` | Play Store listing icon (512×512) |
-| `play-store/feature-graphic-1024x500.png` | Play Store feature graphic |
-| `privacy.html` | Privacy policy URL required by Play |
+| Item | Where |
+|---|---|
+| Signed app bundle (`.aab`) to upload | Sent to you separately — `community-work-1.0.0.aab` |
+| Upload key (keep it safe!) | Sent to you separately — `upload-key.jks` + password |
+| App settings (package id, colours, icons, shortcuts) | `android/twa-manifest.json` |
+| Bundle build | `.github/workflows/android-bundle.yml` → `android-build` branch (unsigned) |
+| Website-ownership file | `play-store/site-root/.well-known/assetlinks.json` |
+| Store text, data-safety and rating answers | `play-store/listing.md` |
+| Icon and feature graphic | `play-store/play-icon-512.png`, `play-store/feature-graphic-1024x500.png` |
+| Screenshots | `assets/screenshots/` (or take your own from the installed app) |
 
-## 1. Make sure the site is live
+Package id: **`io.github.zayaiken21.communitywork`** — permanent once published.
 
-Push to `main`, wait for GitHub Pages to deploy, then open https://zayaiken21.github.io/South-Africa-Community-Work/ on an Android phone in Chrome. You should be offered **Install app**. If you are, the PWA side is ready.
+## 1. Back up the upload key (do this first)
 
-## 2. Generate the Android package
+Save `upload-key.jks` and its password in two safe places (e.g. a password manager and a USB drive). Every future
+update must be signed with it. If it's ever lost, Google can reset it (Play Console → App integrity → Request upload
+key reset), but that takes days.
 
-1. Go to https://www.pwabuilder.com and enter `https://zayaiken21.github.io/South-Africa-Community-Work/`.
-2. Choose **Package for stores → Android → Google Play**.
-3. Suggested settings:
-   - Package ID: `io.github.zayaiken21.communitywork` (permanent — pick carefully)
-   - App name: `Community Work South Africa`, launcher name: `Community Work`
-   - Status bar / theme colour: `#176B4E`, splash background: `#F5F6F1`
-   - Signing key: **Create new** — then back up the `.keystore` file and passwords somewhere safe. You can never update the app without them.
-4. Download the zip. It contains the `.aab` (upload to Play), a test `.apk`, your signing key, and `assetlinks.json`.
+## 2. Put the ownership file on your domain root (removes the browser bar)
 
-## 3. Prove you own the website (removes the browser bar)
+Android looks for `https://zayaiken21.github.io/.well-known/assetlinks.json` — the root of your GitHub user site.
 
-Android checks `https://zayaiken21.github.io/.well-known/assetlinks.json` — the root of your GitHub user site, not this project.
+1. On GitHub create a **public** repository named exactly **`Zayaiken21.github.io`**.
+2. Upload the contents of `play-store/site-root/` into it: the `.well-known` folder, `.nojekyll` and `robots.txt`.
+3. Settings → Pages → Source: **Deploy from a branch** → `main` / root → Save.
+4. After a minute, open https://zayaiken21.github.io/.well-known/assetlinks.json — it should show the JSON.
 
-1. Create a repository named exactly `Zayaiken21.github.io` (if you don’t have one).
-2. Add `.well-known/assetlinks.json` from the PWABuilder zip.
-3. Add an empty `.nojekyll` file at the root of that repo (otherwise GitHub Pages hides folders that start with a dot).
-4. Enable Pages for it, then check the URL above opens the JSON.
+(Bonus: `robots.txt` there also makes search engines read your crawl rules — see `SEO.md`.)
 
-After uploading to Play, open **Play Console → Setup → App signing** and copy the **SHA-256 fingerprint of the app signing key**. Add it to the `sha256_cert_fingerprints` list in `assetlinks.json` (keep the one PWABuilder put there too). Without this step the Play-installed app shows a URL bar.
+## 3. Create the Play Console account
 
-> A custom domain (e.g. communitywork.co.za) avoids needing the separate user-site repo; `assetlinks.json` then lives on that domain.
+https://play.google.com/console → sign up as an **individual** (one-time US$25), verify your identity and phone.
 
-## 4. Create the Play listing
+## 4. Create the app and upload to closed testing
 
-In Play Console (one-time US$25 developer registration):
+1. **Create app** → name *Community Work South Africa*, app, free, accept the declarations.
+2. Fill in **App content** using `play-store/listing.md` (privacy policy, ads = yes, app access with a test login,
+   target audience 18+, data safety, content rating).
+3. **Store listing**: paste the text, upload the icon, feature graphic and at least 2 phone screenshots.
+4. **Testing → Closed testing → Create track** → upload `community-work-1.0.0.aab` → add testers (an email list).
+   Accept **Play App Signing** when asked (Google keeps the final signing key; you keep the upload key).
 
-- **App details:** name, short description (80 chars), full description.
-  - Short: *Find local shifts, jobs across South Africa and online work near you.*
-- **Graphics:** icon `play-store/play-icon-512.png`, feature graphic `play-store/feature-graphic-1024x500.png`, and at least 2 phone screenshots (take them on your phone from the installed app).
-- **Category:** Business. **Tags:** Jobs.
-- **Privacy policy:** https://zayaiken21.github.io/South-Africa-Community-Work/privacy.html
-- **Data safety form:** declare
-  - *Location* — approximate and precise; used for app functionality; not shared for advertising; processed to find nearby jobs.
-  - *Personal info* — name, email or phone only if a user posts a job (shown publicly by design).
-  - *Personal info* (accounts) — name, email, phone, profile and CV for people who sign up; used for app functionality.
-  - *Financial info* — escrow payments are handled by TradeSafe.
-  - *App activity* — anonymous page views and clicks, used for analytics.
-- **Ads:** answer **Yes** to “Contains ads” (affiliate ads on the job pages). See `ADS.md`.
-- **Content rating:** complete the questionnaire (no violence or user-to-user chat; listings are user-generated content).
-- **Target audience:** 18+ (job seekers).
+## 5. Add Google's signing fingerprint (after the first upload)
 
-## 5. Testing before production
+Play Console → **Test and release → App integrity → App signing** → copy the **SHA-256 certificate fingerprint**
+of the *app signing key*. Add it to `sha256_cert_fingerprints` in your `Zayaiken21.github.io` repo's
+`.well-known/assetlinks.json` (keep the existing one too — or send it to me and I'll update both files).
+Without this, the Play-installed app shows a browser bar.
 
-New personal developer accounts must run a **closed test with at least 12 testers who stay opted in for 14 days in a row** before you can apply for production. Upload the `.aab` to a closed testing track, invite friends, family or community members by email, and keep them opted in. Then apply for production access from the Dashboard.
+## 6. The 12-tester rule, then production
 
-## Updating later
+New personal accounts need **at least 12 testers opted in to the closed test for 14 days in a row** before you can
+apply for production. Invite 15+ people so a few dropping out doesn't reset the clock. After 14 days:
+**Dashboard → Apply for production**, answer the questions, then publish to Production.
 
-- Website changes (design, features, job listings): just push to GitHub. No Play update needed.
-- Name, icon, package settings: regenerate in PWABuilder **with the same signing key**, bump the version code, upload the new `.aab`.
+## Updating the app later
+
+- Website changes: nothing to do — the app shows the live site.
+- Name, icon, colours or shortcuts: edit `android/twa-manifest.json`, raise `appVersionCode` (2, 3, …) and
+  `appVersionName`, push to `main`. The workflow builds a new unsigned bundle on the `android-build` branch; sign it with
+  your upload key and upload it as a new release:
+
+  ```sh
+  jarsigner -keystore upload-key.jks -sigalg SHA256withRSA -digestalg SHA-256 app-release-unsigned.aab upload
+  ```

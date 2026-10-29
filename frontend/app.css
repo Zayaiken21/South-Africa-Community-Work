@@ -5155,3 +5155,74 @@ dd {
   border-color: var(--green);
   background: var(--green-soft);
 }
+
+/* CEO view: just Jobs, Online jobs and the dashboard in the bottom bar */
+@media (max-width: 860px) {
+  .tabbar.three {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ---------- Live: online now and who did what ---------- */
+.online-now {
+  justify-items: stretch;
+}
+.live-pulse {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #2fbf71;
+  box-shadow: 0 0 0 0 rgba(47, 191, 113, 0.6);
+  animation: pulse 1.8s infinite;
+  flex: none;
+  margin-top: 6px;
+}
+@keyframes pulse {
+  70% {
+    box-shadow: 0 0 0 10px rgba(47, 191, 113, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(47, 191, 113, 0);
+  }
+}
+.online-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.online-list li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.online-list li:first-child {
+  border-top: 0;
+}
+.online-list small {
+  grid-column: 2 / -1;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.online-list .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.online-list .dot.member {
+  background: #2fbf71;
+}
+.online-list em {
+  font-style: normal;
+}
+.who {
+  font-weight: 700;
+}
+.who.member {
+  color: var(--green);
+}

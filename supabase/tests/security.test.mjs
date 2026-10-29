@@ -1139,4 +1139,31 @@ await denied("team accounts can't be paused", () =>
   as('admin', 'aal1', `select admin_pause('${ids.ceo}', 'work', true, null)`),
 );
 
+// live activity: who did what
+await ok('signed-in actions are recorded with the person', async () => {
+  await as('w1', 'aal1', `select track_event('page_view', 'visitor-test-123', 's1', '/shifts.html')`);
+  await as('anon', null, `select track_event('page_view', 'guest-visitor-9', 's2', '/index.html')`);
+  const d = (await as('admin', 'aal1', `select admin_live(1440) d`)).rows[0].d;
+  const mine = d.recent.find(e => e.user_id === ids.w1);
+  const guest = d.recent.find(e => !e.user_id);
+  if (!mine?.email || !guest?.visitor) throw new Error(JSON.stringify(d.recent.slice(0, 2)));
+  return `${mine.email} · guest ${guest.visitor} · ${d.people.length} member(s)`;
+});
+await denied("visitors can't read who did what", () => as('w1', 'aal1', `select admin_live(30)`));
+await ok(
+  'team can look up names of people online',
+  async () =>
+    (
+      await as(
+        'admin',
+        'aal1',
+        `select count(*)::int n from admin_people_names(array['${ids.w1}'::uuid, '${ids.biz}'::uuid])`,
+      )
+    ).rows[0].n,
+);
+await denied("visitors can't look up names", async () => {
+  const r = await as('w1', 'aal1', `select * from admin_people_names(array['${ids.biz}'::uuid])`);
+  return r.rows.length ? r : {rows: [], affectedRows: 0};
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
