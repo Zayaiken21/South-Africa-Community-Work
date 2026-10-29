@@ -25,13 +25,14 @@ type Person = {
   created_at: string; last_sign_in_at: string | null; strikes: number; total_strikes: number; suspended_reason: string | null; blocked_by: number;
   can_work?: boolean; can_hire?: boolean; active_mode?: 'worker' | 'business'; work_banned?: boolean; hire_banned?: boolean; ban_reason?: string | null;
   avatar_url?: string | null; business_avatar_url?: string | null; staff_role?: string | null; shifts_done?: number; shifts_posted?: number;
+  work_paused?: boolean; hire_paused?: boolean; pause_reason?: string | null;
 };
 type Filter = 'all' | 'workers' | 'business' | 'paused' | 'banned';
 
 export function PeopleAdmin({sb}: {sb: SupabaseClient}) {
   const [q, setQ] = useState(''), [rows, setRows] = useState<Person[] | null>(null), [err, setErr] = useState('');
-  const [filter, setFilter] = useState<Filter>('all'), [banFor, setBanFor] = useState<Person | null>(null);
-  // Before database update 10 the list has no working/hiring details, so fall back to the account type and allow whole-account bans only.
+  const [filter, setFilter] = useState<Filter>('all'), [sheet, setSheet] = useState<{p: Person; kind: Kind} | null>(null);
+  // Before database update 10 the list has no working/hiring details, so fall back to the account type and whole-account actions only.
   const [legacy, setLegacy] = useState(false);
   const load = (search = q) => sb.rpc('admin_users', {p_search: search, p_limit: 200, p_offset: 0}).then(({data, error}) => {
     if (error) return setErr(error.message);
@@ -41,45 +42,50 @@ export function PeopleAdmin({sb}: {sb: SupabaseClient}) {
     setRows(old ? list.map(p => ({...p, can_work: p.account_type !== 'business', can_hire: p.account_type === 'business' || !!p.business_name, active_mode: p.account_type})) : list);
   });
   useEffect(() => { load(''); }, []);
-  const flag = async (id: string, patch: {p_verified?: boolean; p_suspended?: boolean}) => { const {error} = await sb.rpc('admin_set_flags', {p_user: id, ...patch}); if (error) alert(error.message); load(); };
-  const lift = async (p: Person, scope: 'account' | 'work' | 'business') => {
-    const what = scope === 'account' ? 'the account ban' : scope === 'work' ? 'the ban on working' : 'the ban on their business';
-    if (!confirm(`Lift ${what} for ${p.full_name || p.email}?`)) return;
-    const {error} = legacy ? await sb.rpc('admin_set_flags', {p_user: p.id, p_banned: false}) : await sb.rpc('admin_ban', {p_user: p.id, p_scope: scope, p_on: false, p_reason: null});
-    if (error) alert(error.message); load();
-  };
-  const shown = (rows || []).filter(p => filter === 'all' ? true
-    : filter === 'workers' ? p.can_work && !p.work_banned
-    : filter === 'business' ? !!p.business_name && (p.can_hire || p.hire_banned)
-    : filter === 'paused' ? p.suspended && !p.banned
-    : p.banned || p.work_banned || p.hire_banned);
-  const count = (f: Filter) => (rows || []).filter(p => f === 'all' ? true : f === 'workers' ? p.can_work && !p.work_banned : f === 'business' ? !!p.business_name && (p.can_hire || p.hire_banned) : f === 'paused' ? p.suspended && !p.banned : p.banned || p.work_banned || p.hire_banned).length;
+  const verify = async (p: Person) => { const {error} = await sb.rpc('admin_set_flags', {p_user: p.id, p_verified: !p.verified}); if (error) alert(error.message); load(); };
+  const isPaused = (p: Person) => !p.banned && (p.suspended || !!p.work_paused || !!p.hire_paused);
+  const isBanned = (p: Person) => p.banned || !!p.work_banned || !!p.hire_banned;
+  const match = (p: Person, f: Filter) => f === 'all' ? true
+    : f === 'workers' ? !!p.can_work && !p.work_banned
+    : f === 'business' ? !!p.business_name && (!!p.can_hire || !!p.hire_banned)
+    : f === 'paused' ? isPaused(p) : isBanned(p);
+  const shown = (rows || []).filter(p => match(p, filter));
 
   return (
     <div className="stack">
       <form className="search-box big" onSubmit={e => { e.preventDefault(); load(); }}><Search size={18}/><input value={q} onChange={e => setQ(e.target.value)} placeholder="Name, business, email or phone" aria-label="Search people"/><button className="btn btn-dark btn-sm">Search</button></form>
       <div className="chip-wrap">{([['all', 'Everyone'], ['workers', 'Workers'], ['business', 'Businesses'], ['paused', 'Paused'], ['banned', 'Banned']] as [Filter, string][]).map(([k, l]) =>
-        <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{l} <em className="count">{rows ? count(k) : ''}</em></button>)}</div>
+        <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{l} <em className="count">{rows ? (rows.filter(p => match(p, k)).length) : ''}</em></button>)}</div>
       {err && <Note kind="error">{err}</Note>}
-      {legacy && <Note kind="error">Your database is missing the latest update, so phone numbers, photos and separate bans (working only / business only) aren’t available yet. In Supabase → SQL Editor, run <strong>supabase/run-updates.sql</strong>, then refresh this page.</Note>}
+      {legacy && <Note kind="error">Your database is missing the latest update, so phone numbers, photos and pausing or banning just one side aren’t available yet. In Supabase → SQL Editor, run <strong>supabase/run-updates.sql</strong>, then refresh this page.</Note>}
       {!rows ? <div className="card-panel center"><span className="spinner"/></div>
         : !shown.length ? <div className="empty small"><h3>Nobody here</h3><p>Try another filter or search.</p></div>
-        : <div className="people-grid">{shown.map(p => <PersonCard key={p.id} p={p} onVerify={() => flag(p.id, {p_verified: !p.verified})}
-            onSuspend={() => confirm(p.suspended ? 'Restore this account?' : 'Pause this account? They can’t work or hire until restored, but they can appeal.') && flag(p.id, {p_suspended: !p.suspended})}
-            onBan={() => setBanFor(p)} onLift={s => lift(p, s)}/>)}</div>}
-      {banFor && <BanSheet sb={sb} p={banFor} legacy={legacy} onClose={() => setBanFor(null)} onDone={() => { setBanFor(null); load(); }}/>}
+        : <div className="people-grid">{shown.map(p => <PersonCard key={p.id} p={p} paused={isPaused(p)} banned={isBanned(p)} onVerify={() => verify(p)} onOpen={kind => setSheet({p, kind})}/>)}</div>}
+      {sheet && <ActionSheet sb={sb} p={sheet.p} kind={sheet.kind} legacy={legacy} onClose={() => setSheet(null)} onDone={() => { setSheet(null); load(); }}/>}
     </div>
   );
 }
 
-function PersonCard({p, onVerify, onSuspend, onBan, onLift}: {p: Person; onVerify: () => void; onSuspend: () => void; onBan: () => void; onLift: (s: 'account' | 'work' | 'business') => void}) {
+type Kind = 'pause' | 'ban';
+type Scope = 'account' | 'work' | 'business';
+
+function PersonCard({p, paused, banned, onVerify, onOpen}: {p: Person; paused: boolean; banned: boolean; onVerify: () => void; onOpen: (k: Kind) => void}) {
   const name = p.full_name?.trim() || 'No name added';
   const status = p.banned ? <span className="pill declined"><Ban size={12}/>Banned</span>
-    : p.suspended ? <span className="pill declined"><Lock size={12}/>Paused</span>
+    : p.suspended ? <span className="pill paused"><Lock size={12}/>Paused</span>
     : p.verified ? <span className="pill accepted"><BadgeCheck size={12}/>Verified</span> : <span className="pill">Active</span>;
   const team = p.staff_role ? <span className="pill team"><ShieldCheck size={12}/>{p.staff_role === 'ceo' ? 'CEO' : 'Admin'}</span> : null;
+  const live = !p.banned && !p.suspended && !p.staff_role;
+  const sideState = (ban?: boolean, pause?: boolean, used?: boolean) => ban ? ' off' : pause ? ' paused' : !used ? ' unused' : '';
+  const notes: [string, string][] = [];
+  if (p.banned) notes.push(['Whole account banned', p.ban_reason || 'No reason recorded.']);
+  else {
+    if (p.work_banned || p.hire_banned) notes.push([p.work_banned ? 'Banned from working' : 'Business banned', p.ban_reason || 'No reason recorded.']);
+    if (p.suspended) notes.push(['Account paused', p.suspended_reason || 'No reason recorded.']);
+    else if (p.work_paused || p.hire_paused) notes.push([p.work_paused && p.hire_paused ? 'Working and hiring paused' : p.work_paused ? 'Working paused' : 'Hiring paused', p.pause_reason || 'No reason recorded.']);
+  }
   return (
-    <article className={'person-card' + (p.banned ? ' is-banned' : '')}>
+    <article className={'person-card' + (p.banned ? ' is-banned' : paused ? ' is-paused' : '')}>
       <header className="person-top">
         <Avatar url={p.avatar_url} name={name} size={52}/>
         <div className="person-id">
@@ -91,14 +97,14 @@ function PersonCard({p, onVerify, onSuspend, onBan, onLift}: {p: Person; onVerif
       </header>
 
       <div className="person-sides">
-        <div className={'side' + (p.work_banned ? ' off' : !p.can_work ? ' unused' : '') + (p.active_mode === 'worker' && !p.banned && !p.staff_role ? ' now' : '')}>
-          <UserRound size={16}/><div><b>Working</b><small>{p.work_banned ? 'Banned' : p.can_work ? `${p.shifts_done ?? 0} shifts done · ${p.strikes ?? 0} strike${p.strikes === 1 ? '' : 's'}` : 'Not used'}</small></div>
-          {p.active_mode === 'worker' && !p.work_banned && !p.banned && !p.staff_role && <i className="now-tag">now</i>}
+        <div className={'side' + sideState(p.work_banned, p.work_paused, p.can_work) + (p.active_mode === 'worker' && live ? ' now' : '')}>
+          <UserRound size={16}/><div><b>Working</b><small>{p.work_banned ? 'Banned' : p.work_paused ? 'Paused' : p.can_work ? `${p.shifts_done ?? 0} shifts done · ${p.strikes ?? 0} strike${p.strikes === 1 ? '' : 's'}` : 'Not used'}</small></div>
+          {p.active_mode === 'worker' && live && !p.work_banned && <i className="now-tag">now</i>}
         </div>
-        <div className={'side' + (p.hire_banned ? ' off' : !p.can_hire ? ' unused' : '') + (p.active_mode === 'business' && !p.banned && !p.staff_role ? ' now' : '')}>
+        <div className={'side' + sideState(p.hire_banned, p.hire_paused, p.can_hire) + (p.active_mode === 'business' && live ? ' now' : '')}>
           {p.business_avatar_url ? <Avatar url={p.business_avatar_url} name={p.business_name} size={22}/> : <Building2 size={16}/>}
-          <div><b>{p.business_name || 'No business'}</b><small>{p.hire_banned ? 'Business banned' : p.business_name ? `${p.business_type ? p.business_type + ' · ' : ''}${p.shifts_posted ?? 0} shifts posted` : 'Not used'}</small></div>
-          {p.active_mode === 'business' && !p.hire_banned && !p.banned && !p.staff_role && <i className="now-tag">now</i>}
+          <div><b>{p.business_name || 'No business'}</b><small>{p.hire_banned ? 'Business banned' : p.hire_paused ? 'Hiring paused' : p.business_name ? `${p.business_type ? p.business_type + ' · ' : ''}${p.shifts_posted ?? 0} shifts posted` : 'Not used'}</small></div>
+          {p.active_mode === 'business' && live && !p.hire_banned && <i className="now-tag">now</i>}
         </div>
       </div>
 
@@ -111,68 +117,87 @@ function PersonCard({p, onVerify, onSuspend, onBan, onLift}: {p: Person; onVerif
         <div><dt><Ban size={13}/>Blocked by</dt><dd>{p.blocked_by ? `${p.blocked_by} business${p.blocked_by > 1 ? 'es' : ''}` : 'Nobody'}</dd></div>
       </dl>
 
-      {(p.banned || p.work_banned || p.hire_banned || p.suspended) && (
-        <div className="ban-box">
-          <strong>{p.banned ? 'Whole account banned' : p.suspended ? 'Account paused' : p.work_banned ? 'Banned from working' : 'Business banned'}</strong>
-          <span>{p.ban_reason || p.suspended_reason || 'No reason recorded.'}</span>
-        </div>
-      )}
+      {notes.map(([t, r]) => <div key={t} className={'ban-box' + (t.includes('aused') ? ' pause' : '')}><strong>{t}</strong><span>{r}</span></div>)}
 
-      <div className="person-actions">
-        <a className="btn btn-ghost btn-sm" href={'profile.html?id=' + p.id}><Eye size={14}/>Profile</a>
-        {p.business_name && !p.hire_banned && <a className="btn btn-ghost btn-sm" href={'profile.html?view=business&id=' + p.id}><Building2 size={14}/>Business page</a>}
-        <button className="btn btn-outline btn-sm" onClick={onVerify}><BadgeCheck size={14}/>{p.verified ? 'Unverify' : 'Verify'}</button>
-        {!p.banned && !p.staff_role && <button className="btn btn-outline btn-sm" onClick={onSuspend}>{p.suspended ? <><Undo2 size={14}/>Restore</> : <><Lock size={14}/>Pause</>}</button>}
-        {p.banned ? <button className="btn btn-outline btn-sm" onClick={() => onLift('account')}><Undo2 size={14}/>Lift account ban</button>
-          : <>
-            {p.work_banned && <button className="btn btn-outline btn-sm" onClick={() => onLift('work')}><Undo2 size={14}/>Allow working</button>}
-            {p.hire_banned && <button className="btn btn-outline btn-sm" onClick={() => onLift('business')}><Undo2 size={14}/>Allow business</button>}
-            {!p.staff_role && <button className="btn btn-ghost btn-sm danger" onClick={onBan}><Ban size={14}/>Ban…</button>}
-          </>}
+      {/* Same five buttons on every card, always on one line. */}
+      <div className="act-bar">
+        <a className="act" href={'profile.html?id=' + p.id}><Eye size={18}/><span>Profile</span></a>
+        {p.business_name && !p.hire_banned
+          ? <a className="act" href={'profile.html?view=business&id=' + p.id}><Building2 size={18}/><span>Business</span></a>
+          : <span className="act disabled" aria-disabled="true"><Building2 size={18}/><span>Business</span></span>}
+        <button className={'act' + (p.verified ? ' on' : '')} onClick={onVerify}><BadgeCheck size={18}/><span>{p.verified ? 'Verified' : 'Verify'}</span></button>
+        <button className={'act warn' + (paused ? ' on' : '')} disabled={!!p.staff_role || p.banned} onClick={() => onOpen('pause')}><Lock size={18}/><span>{paused ? 'Paused' : 'Pause'}</span></button>
+        <button className={'act danger' + (banned ? ' on' : '')} disabled={!!p.staff_role} onClick={() => onOpen('ban')}><Ban size={18}/><span>{banned ? 'Banned' : 'Ban'}</span></button>
       </div>
     </article>
   );
 }
 
-function BanSheet({sb, p, legacy, onClose, onDone}: {sb: SupabaseClient; p: Person; legacy: boolean; onClose: () => void; onDone: () => void}) {
-  const hasBiz = !legacy && !!p.business_name && !!p.can_hire && !p.hire_banned;
-  const works = !legacy && !!p.can_work && !p.work_banned;
-  const [scope, setScope] = useState<'account' | 'work' | 'business'>(hasBiz && !works ? 'business' : 'account');
-  const [reason, setReason] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState('');
+// One sheet for pausing and banning: pick the whole account, only working, or only the business — and undo any that are on.
+function ActionSheet({sb, p, kind, legacy, onClose, onDone}: {sb: SupabaseClient; p: Person; kind: Kind; legacy: boolean; onClose: () => void; onDone: () => void}) {
+  const ban = kind === 'ban';
   const who = p.full_name || p.email;
-  const options: [typeof scope, string, string, boolean][] = [
-    ['account', `Ban ${who}`, 'The person can’t work or hire on Community Work again, with any side of this account. Their open shifts disappear.', true],
-    ['work', 'Ban from working only', hasBiz ? `They can no longer pick up shifts. ${p.business_name} keeps hiring — Working disappears from their account.` : 'They have no business, so this closes the whole account.', works],
-    ['business', `Ban ${p.business_name || 'their business'} only`, `The business can’t hire and its open shifts are removed. ${who} can still pick up shifts — Hiring disappears from their account.`, hasBiz],
-  ];
+  const biz = p.business_name || 'their business';
+  const on: Record<Scope, boolean> = ban
+    ? {account: p.banned, work: !!p.work_banned, business: !!p.hire_banned}
+    : {account: p.suspended, work: !!p.work_paused, business: !!p.hire_paused};
+  const canWork = !legacy && !!p.can_work && !p.work_banned, canBiz = !legacy && !!p.business_name && !!p.can_hire && !p.hire_banned;
+  const avail: Record<Scope, boolean> = {account: !on.account, work: canWork && !on.work && !on.account, business: canBiz && !on.business && !on.account};
+  const label: Record<Scope, [string, string]> = ban ? {
+    account: [`Ban ${who}`, 'Can’t work or hire on Community Work again, with any side of this account. Their open shifts disappear.'],
+    work: ['Ban from working only', canBiz ? `No more picking up shifts. ${biz} keeps hiring — Working disappears from their account.` : 'They have no business, so this closes the whole account.'],
+    business: [`Ban ${biz} only`, `The business can’t hire and its open shifts are removed. ${who} can still pick up shifts — Hiring disappears.`],
+  } : {
+    account: [`Pause ${who}`, 'Can’t work or hire until you restore them or approve their appeal. Their open shifts are hidden meanwhile.'],
+    work: ['Pause working only', 'Can’t pick up shifts for now. Their business (if any) keeps hiring. They can appeal.'],
+    business: [`Pause ${biz} only`, `The business can’t post shifts and its open shifts are hidden for now. ${who} can still pick up shifts. They can appeal.`],
+  };
+  const first = (['account', 'work', 'business'] as Scope[]).find(k => avail[k]) || 'account';
+  const [scope, setScope] = useState<Scope>(first);
+  const [reason, setReason] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState('');
+  const call = async (sc: Scope, turnOn: boolean) => {
+    if (legacy) return sb.rpc('admin_set_flags', ban ? {p_user: p.id, p_banned: turnOn} : {p_user: p.id, p_suspended: turnOn});
+    return sb.rpc(ban ? 'admin_ban' : 'admin_pause', {p_user: p.id, p_scope: sc, p_on: turnOn, p_reason: turnOn ? (reason.trim() || null) : null});
+  };
+  const undo = async (sc: Scope) => {
+    setBusy(true); setErr('');
+    const {error} = await call(sc, false);
+    setBusy(false);
+    if (error) return setErr(error.message);
+    onDone();
+  };
+  const active = (['account', 'work', 'business'] as Scope[]).filter(k => on[k]);
+  const anyAvail = (['account', 'work', 'business'] as Scope[]).some(k => avail[k]);
   return (
-    <Sheet title="Ban permanently" onClose={onClose}>
+    <Sheet title={ban ? 'Ban permanently' : 'Pause for now'} onClose={onClose}>
       <form className="form" onSubmit={async e => {
         e.preventDefault(); setBusy(true); setErr('');
-        if (legacy) {
-          const {error} = await sb.rpc('admin_set_flags', {p_user: p.id, p_banned: true});
-          setBusy(false);
-          if (error) return setErr(error.message);
-          return onDone();
-        }
-        const {data, error} = await sb.rpc('admin_ban', {p_user: p.id, p_scope: scope, p_on: true, p_reason: reason.trim() || null});
+        const {data, error} = await call(scope, true);
         setBusy(false);
         if (error) return setErr(error.message);
-        if (data !== scope) alert('They had nothing else on this account, so the whole account was banned.');
+        if (ban && !legacy && data && data !== scope) alert('They had nothing else on this account, so the whole account was banned.');
         onDone();
       }}>
-        <p className="muted">Bans are permanent and can’t be appealed. To give someone a second chance, use <strong>Pause</strong> instead. Every ban is logged with your name.</p>
-        {legacy && <Note kind="error">Only a whole-account ban is possible until you run <strong>supabase/run-updates.sql</strong> in Supabase. After that you can also ban just the working side or just the business.</Note>}
-        <div className="ban-options">{options.filter(o => o[3]).map(([k, title, text]) => (
-          <label key={k} className={'ban-option' + (scope === k ? ' on' : '')}>
-            <input type="radio" name="scope" checked={scope === k} onChange={() => setScope(k)}/>
-            <span><strong>{title}</strong><small>{text}</small></span>
-          </label>))}</div>
-{!legacy && (
-        <label className="field">Reason (they’ll see this)<textarea className="wrap-text" rows={3} maxLength={300} value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Didn’t pay workers for three shifts"/><small>{reason.length}/300</small></label>
+        <p className="muted">{ban ? <>Bans are permanent and can’t be appealed. For a second chance, use <strong>Pause</strong>.</> : <>A pause is temporary: they see the reason and can appeal. Restore any time.</>} Every change is logged with your name.</p>
+        {legacy && <Note kind="error">Only the whole account can be {ban ? 'banned' : 'paused'} until you run <strong>supabase/run-updates.sql</strong> in Supabase.</Note>}
+        {active.length > 0 && (
+          <div className="undo-list">{active.map(k => (
+            <div key={k} className="undo-row">
+              <span><strong>{k === 'account' ? (ban ? 'Whole account banned' : 'Whole account paused') : k === 'work' ? (ban ? 'Banned from working' : 'Working paused') : (ban ? 'Business banned' : 'Hiring paused')}</strong>
+                <small>{(ban ? p.ban_reason : k === 'account' ? p.suspended_reason : p.pause_reason) || 'No reason recorded.'}</small></span>
+              <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={() => confirm(`${ban ? 'Lift this ban' : 'Restore this'} for ${who}?`) && undo(k)}><Undo2 size={14}/>{ban ? 'Lift' : 'Restore'}</button>
+            </div>))}</div>
         )}
+        {anyAvail && <>
+          <div className="ban-options">{(['account', 'work', 'business'] as Scope[]).filter(k => avail[k]).map(k => (
+            <label key={k} className={'ban-option' + (scope === k ? ' on' : '') + (ban ? '' : ' pause')}>
+              <input type="radio" name="scope" checked={scope === k} onChange={() => setScope(k)}/>
+              <span><strong>{label[k][0]}</strong><small>{label[k][1]}</small></span>
+            </label>))}</div>
+          {!legacy && <label className="field">Reason (they’ll see this)<textarea className="wrap-text" rows={3} maxLength={300} value={reason} onChange={e => setReason(e.target.value)} placeholder={ban ? 'e.g. Didn’t pay workers for three shifts' : 'e.g. Three late arrivals this month'}/><small>{reason.length}/300</small></label>}
+        </>}
         {err && <Note kind="error">{err}</Note>}
-        <button className="btn btn-block btn-danger" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17}/> : <Ban size={17}/>}Ban permanently</button>
+        {anyAvail && <button className={'btn btn-block ' + (ban ? 'btn-danger' : 'btn-warn')} disabled={busy}>{busy ? <LoaderCircle className="spin" size={17}/> : ban ? <Ban size={17}/> : <Lock size={17}/>}{ban ? 'Ban permanently' : 'Pause'}</button>}
       </form>
     </Sheet>
   );

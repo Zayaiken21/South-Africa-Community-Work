@@ -980,3 +980,36 @@ td, dd { overflow-wrap: anywhere; }
   .view-switch { margin-top: 12px; padding: 10px 12px; }
   .vs-label small { display: none; }
 }
+
+/* ---------- People: one row of the same five actions on every card ---------- */
+.act-bar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.act { display: grid; justify-items: center; gap: 3px; padding: 8px 0; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); font-size: 11.5px; letter-spacing: -.01em; font-weight: 650; line-height: 1.1; text-align: center; min-width: 0; }
+.act span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act:hover:not(:disabled):not(.disabled) { border-color: var(--green); color: var(--green); }
+.act.on { background: var(--green-soft); border-color: transparent; color: var(--green); }
+.act.warn.on { background: var(--amber-soft); color: var(--amber); }
+.act.danger { color: var(--red); }
+.act.danger.on { background: var(--red-soft); border-color: transparent; }
+.act:disabled, .act.disabled { opacity: .38; cursor: not-allowed; }
+.pill.paused { background: var(--amber-soft); color: var(--amber); }
+.side.paused { background: var(--amber-soft); }
+.side.paused > svg, .side.paused b { color: var(--amber); }
+.person-card.is-paused { border-color: color-mix(in srgb, var(--amber) 40%, var(--line)); }
+.ban-box.pause { background: var(--amber-soft); color: var(--amber); }
+.undo-list { display: grid; gap: 8px; }
+.undo-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); }
+.undo-row strong { display: block; }
+.undo-row small { display: block; color: var(--muted); font-size: 13px; }
+.ban-option.pause.on { border-color: var(--amber); background: var(--amber-soft); }
+.ban-option.pause input { accent-color: var(--amber); }
+.btn-warn { background: var(--amber); color: #fff; }
+.btn-warn:hover { filter: brightness(.94); }
+
+/* ---------- Free-cancel countdown ---------- */
+.cancel-timer { position: relative; overflow: hidden; display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 12px; background: var(--green-soft); color: var(--green); font-size: 14px; font-weight: 600; }
+.cancel-timer b { font-variant-numeric: tabular-nums; font-size: 15.5px; }
+.cancel-timer span, .cancel-timer svg { position: relative; z-index: 1; }
+.cancel-timer i { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--green); transition: width 1s linear; }
+.cancel-timer.soon { background: var(--amber-soft); color: var(--amber); }
+.cancel-timer.soon i { background: var(--amber); }
+.cancel-timer.over { background: var(--surface-2); color: var(--muted); margin: 0; }

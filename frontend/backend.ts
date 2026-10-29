@@ -37,6 +37,7 @@ export type Profile = {
   business_bio?: string | null; business_avatar_url?: string | null; banned?: boolean;
   // Update 10: a side can be banned on its own; team accounts open in the CEO view unless they switch it off.
   work_banned?: boolean; hire_banned?: boolean; ban_reason?: string | null; staff_view?: boolean;
+  work_paused?: boolean; hire_paused?: boolean; pause_reason?: string | null;
 };
 export type Experience = {role: string; place: string; years?: string; note?: string};
 
