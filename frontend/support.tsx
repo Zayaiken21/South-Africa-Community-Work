@@ -220,7 +220,11 @@ function Rich({text}: {text: string}) {
 /** One chat message. */
 type Msg = {from: 'randy' | 'me'; text: string; chips?: string[]; handoff?: boolean};
 // A stored question written the way people read it: capital first letter, a capital “I”, and a question mark.
-const asQuestion = (q: string) => q.replace(/^./, c => c.toUpperCase()).replace(/\bi\b/g, 'I') + '?';
+const asQuestion = (q: string) =>
+  q
+    .replace(/^./, c => c.toUpperCase())
+    .replace(/\bi\b/g, 'I')
+    .replace(/community work/gi, 'Community Work') + '?';
 /** Randy's "pick a topic" message. */
 const MENU = 'What else can I help with? Pick a topic, or type your question.';
 /** Randy's first message. */
