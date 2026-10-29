@@ -228,8 +228,7 @@ const asQuestion = (q: string) =>
 /** Randy's "pick a topic" message. */
 const MENU = 'What else can I help with? Pick a topic, or type your question.';
 /** Randy's first message. */
-const GREETING =
-  'Hi, I’m **Randy** 👋 I can help with payments, shifts, strikes, your account, hiring and our rules. Ask me anything, or pick a topic.';
+const GREETING = 'Hi, I’m **Randy** 👋 Pick a topic below to see common questions, or type your own.';
 
 /** The Randy chat box. */
 export function RandyChat({onHandoff}: {onHandoff: (question: string) => void}) {
@@ -238,7 +237,8 @@ export function RandyChat({onHandoff}: {onHandoff: (question: string) => void}) 
     {
       from: 'randy',
       text: GREETING,
-      chips: ['When do I get paid?', 'How do I pick up a shift?', 'How do strikes work?', 'How do I post a shift?'],
+      // Start with every topic, so people can browse before typing.
+      chips: topics.map(t => t[1]),
     },
   ]);
   const [text, setText] = useState(''),
