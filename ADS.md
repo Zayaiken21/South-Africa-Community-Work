@@ -1,8 +1,8 @@
 # Making money: affiliate offers and Google ads
 
-The app has money spots on every main page. Each spot shows, in this order:
+Money spots appear **only on the job pages**: Home, Find work (in person and online) and job details. Each spot shows, in this order:
 
-1. **Your affiliate offer** from `affiliates.json` — you earn per click, sign-up or sale (or per view, if your network gives you a view pixel).
+1. **Your affiliate offer** — added in **CEO dashboard → Ads** (easiest: add, pause, schedule and see views/clicks there), or in `affiliates.json` — you earn per click, sign-up or sale (or per view, if your network gives you a view pixel).
 2. **A Google AdSense ad** from `ads-config.json` — Google pays per 1,000 views and per click.
 3. **Nothing** — empty spots disappear. There are no filler promos.
 

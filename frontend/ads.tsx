@@ -1,9 +1,11 @@
 import {track} from './analytics';
+import {backend} from './backend';
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {ArrowUpRight, X} from 'lucide-react';
 
 /*
-  Money spots: affiliate offers first (affiliates.json), Google AdSense second (ads-config.json).
+  Money spots, on the job pages only (Home, Find work, job details): affiliate offers first — the ones the CEO adds in the
+  dashboard (Ads tab) plus any in affiliates.json — and Google AdSense second (ads-config.json).
   Nothing shows when neither has something for a spot — no filler promos.
 
   Preview the layout with sample offers: add ?adpreview=1 to any page URL.
@@ -36,9 +38,24 @@ let offersPromise: Promise<Offer[]> | null = null;
 let configPromise: Promise<AdConfig> | null = null;
 let scriptAdded = false;
 
+// Offers the CEO manages in the dashboard. The database only returns live ones (and none when offers are switched off).
+function loadDbOffers(): Promise<Offer[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  return backend().then(async sb => {
+    if (!sb) return null;
+    const [res, st] = await Promise.all([sb.from('promos').select('*').eq('active', true), sb.rpc('public_settings')]);
+    return (st.data as any)?.promos_enabled === false ? null : res;
+  }).then((res: any) => (res?.data || [])
+    .filter((p: any) => (!p.starts_on || p.starts_on <= today) && (!p.ends_on || p.ends_on >= today)).map((p: any): Offer => ({
+    id: p.id, partner: p.partner, title: p.title, text: p.body || '', url: p.url, cta: p.cta || undefined, badge: p.badge || undefined,
+    logo: p.logo || undefined, impressionUrl: p.impression_url || undefined, spots: p.spots?.length ? p.spots : undefined,
+    categories: p.categories?.length ? p.categories : undefined, modes: p.modes?.length ? p.modes : undefined, weight: p.weight || 1,
+  }))).catch(() => []);
+}
+
 function loadOffers(): Promise<Offer[]> {
   if (!offersPromise) {
-    offersPromise = fetch('./affiliates.json', {cache: 'no-cache'})
+    const file = fetch('./affiliates.json', {cache: 'no-cache'})
       .then(r => (r.ok ? r.json() : {offers: []}))
       .then((d: any) => {
         const now = Date.now();
@@ -47,7 +64,8 @@ function loadOffers(): Promise<Offer[]> {
           (preview ? true : !o.sample) &&
           (!o.start || Date.parse(o.start) <= now) && (!o.end || Date.parse(o.end) > now));
       })
-      .catch(() => []);
+      .catch(() => [] as Offer[]);
+    offersPromise = Promise.all([loadDbOffers(), file]).then(([db, f]) => [...db, ...f]);
   }
   return offersPromise;
 }
@@ -120,9 +138,9 @@ function useImpression(ref: React.RefObject<HTMLElement | null>, url?: string, o
 
 function initials(name: string) { return name.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'AD'; }
 
-function OfferCard({offer, spot}: {offer: Offer; spot: Spot}) {
+export function OfferCard({offer, spot, preview: isPreview = false}: {offer: Offer; spot: Spot; preview?: boolean}) {
   const ref = useRef<HTMLElement>(null);
-  useImpression(ref, offer.impressionUrl, offer.id);
+  useImpression(ref, isPreview ? undefined : offer.impressionUrl, isPreview ? undefined : offer.id);
   return (
     <aside ref={ref} className={'sponsored sp-' + spot} aria-label={'Sponsored: ' + offer.partner}>
       <div className="sp-top">
