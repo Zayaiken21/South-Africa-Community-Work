@@ -1,0 +1,65 @@
+name: Android app bundle
+
+# Builds the Google Play app (an Android App Bundle, .aab) that opens the website full-screen as an app
+# (a Trusted Web Activity). The settings are in android/twa-manifest.json.
+#
+# The bundle is built unsigned and published with its build log to the `android-build` branch. It is then signed
+# with your private upload key on your own computer (or by Claude) — the key is never stored on GitHub.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - android/twa-manifest.json
+      - .github/workflows/android-bundle.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-bundle
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generate the Android project and build the bundle
+        run: |
+          set -o pipefail
+          mkdir -p out twa ~/.bubblewrap
+          # Tell the packager where this runner's Java and Android SDK are, so it never asks.
+          printf '{"jdkPath":"%s","androidSdkPath":"%s"}' "$JAVA_HOME" "$ANDROID_HOME" > ~/.bubblewrap/config.json
+          npm install -g @bubblewrap/cli@1.27.0 2>&1 | tail -2
+          cp android/twa-manifest.json twa/
+          cd twa
+          yes "" | bubblewrap update --skipVersionUpgrade 2>&1 | tee ../out/build-log.txt
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon --stacktrace 2>&1 | tee -a ../out/build-log.txt
+          cp app/build/outputs/bundle/release/*.aab ../out/app-release-unsigned.aab
+          cp twa-manifest.json ../out/
+
+      - name: Publish the bundle and log to the android-build branch
+        if: always()
+        run: |
+          mkdir -p out
+          cd out
+          printf '# Android build\n\nUnsigned Play bundle and build log from .github/workflows/android-bundle.yml (%s). Sign before uploading.\n' "$(date -u +%Y-%m-%dT%H:%MZ)" > README.md
+          git init -q -b android-build
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Android build $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" android-build
