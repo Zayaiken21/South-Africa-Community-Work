@@ -1,8 +1,7 @@
 // Visit and click tracking.
 // 1. Your own records: anonymous events saved to the Supabase `events` table (no cookies; a random visitor id in
-//    local storage). These feed the CEO dashboard: visitors, page views, job "Apply" clicks, sponsored views/clicks.
+//    local storage). These feed the CEO dashboard: visitors, page views, job "Apply" clicks, affiliate ad views/clicks.
 // 2. Google Analytics 4: loaded only after the visitor accepts analytics cookies. Set the ID in /analytics-config.json.
-// Google AdSense ads run inside Google's own frames, so clicks on them can't be counted here — see AdSense reports.
 import {backend} from './backend';
 
 type Config = {ga4?: string};

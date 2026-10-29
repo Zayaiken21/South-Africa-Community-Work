@@ -34,7 +34,7 @@ Push to `main`, wait for GitHub Pages to deploy, then open https://zayaiken21.gi
 Android checks `https://zayaiken21.github.io/.well-known/assetlinks.json` — the root of your GitHub user site, not this project.
 
 1. Create a repository named exactly `Zayaiken21.github.io` (if you don’t have one).
-2. Add `.well-known/assetlinks.json` from the PWABuilder zip (and `ads.txt` once AdSense is set up — see `ADS.md`).
+2. Add `.well-known/assetlinks.json` from the PWABuilder zip.
 3. Add an empty `.nojekyll` file at the root of that repo (otherwise GitHub Pages hides folders that start with a dot).
 4. Enable Pages for it, then check the URL above opens the JSON.
 
@@ -54,9 +54,10 @@ In Play Console (one-time US$25 developer registration):
 - **Data safety form:** declare
   - *Location* — approximate and precise; used for app functionality; not shared for advertising; processed to find nearby jobs.
   - *Personal info* — name, email or phone only if a user posts a job (shown publicly by design).
-  - *Device or other IDs* — advertising ID, used for advertising, shared with Google (AdSense).
-  - No accounts, no payments.
-- **Ads:** answer **Yes** to “Contains ads”. See `ADS.md`.
+  - *Personal info* (accounts) — name, email, phone, profile and CV for people who sign up; used for app functionality.
+  - *Financial info* — escrow payments are handled by TradeSafe.
+  - *App activity* — anonymous page views and clicks, used for analytics.
+- **Ads:** answer **Yes** to “Contains ads” (affiliate ads on the job pages). See `ADS.md`.
 - **Content rating:** complete the questionnaire (no violence or user-to-user chat; listings are user-generated content).
 - **Target audience:** 18+ (job seekers).
 

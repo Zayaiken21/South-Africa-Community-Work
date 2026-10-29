@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {useEffect, useState} from 'react';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {
   UserRound, Building2, LogOut, LoaderCircle, Check, X, Plus, MapPin, Clock, ShieldCheck, FileText, Wallet,
@@ -1160,7 +1160,7 @@ function TwoFactor({sb, onDone, onCancel}: {sb: SupabaseClient; onDone: () => vo
 
 const ADMIN_TABS: [string, string, React.ComponentType<{size?: number}>][] = [
   ['overview', 'Overview', LayoutDashboard], ['live', 'Live', Activity], ['users', 'People', Users], ['support', 'Support', SupportIcon], ['appeals', 'Appeals', Gavel],
-  ['payments', 'Payments', Wallet], ['ads', 'Ads', Megaphone], ['team', 'Team', ShieldCheck], ['settings', 'Settings', Settings], ['audit', 'Activity log', FileText]];
+  ['payments', 'Payments', Wallet], ['ads', 'Affiliate ads', Megaphone], ['team', 'Team', ShieldCheck], ['settings', 'Settings', Settings], ['audit', 'Activity log', FileText]];
 
 function AdminConsole({sb, role, me, viewOn}: {sb: SupabaseClient; role: 'ceo' | 'admin'; me: string; viewOn: boolean}) {
   const [tab, setTabState] = useState(params.get('tab') || 'overview');
@@ -1189,7 +1189,6 @@ function AdminConsole({sb, role, me, viewOn}: {sb: SupabaseClient; role: 'ceo' |
           </div>
           <div className="dash-actions inline">
             <a className="chip-link" href="https://analytics.google.com/" target="_blank" rel="noreferrer"><BarChart3 size={15}/>Analytics</a>
-            <a className="chip-link" href="https://www.google.com/adsense/" target="_blank" rel="noreferrer"><TrendingUp size={15}/>AdSense</a>
             <a className="chip-link" href="https://www.tradesafe.co.za/" target="_blank" rel="noreferrer"><Wallet size={15}/>TradeSafe</a>
           </div>
         </div>
@@ -1233,14 +1232,14 @@ function useRpc<T>(sb: SupabaseClient, fn: string, args: Record<string, unknown>
   return {data, err};
 }
 
-function Tile({label, value, sub}: {label: string; value: React.ReactNode; sub?: string}) {
-  return <div className="tile"><span>{label}</span><strong>{value}</strong>{sub && <small>{sub}</small>}</div>;
-}
 const n = (v: number | undefined) => (v ?? 0).toLocaleString('en-ZA');
 
 function Overview({sb, go}: {sb: SupabaseClient; go: (t: string) => void}) {
   const [days, setDays] = useState(30);
   const {data: s, err} = useRpc<any>(sb, 'admin_stats', {p_days: days}, [days]);
+  // Ad events are stored by ad id; show the ad's partner and headline instead.
+  const [adNames, setAdNames] = useState<Record<string, string>>({});
+  useEffect(() => { sb.from('promos').select('id, partner, title').then(({data}) => setAdNames(Object.fromEntries((data || []).map((p: any) => [p.id, `${p.partner} · ${p.title}`])))); }, []);
   if (err) return <Notice kind="error">{err}</Notice>;
   if (!s) return <div className="card-panel center"><span className="spinner"/></div>;
   const max = Math.max(1, ...s.daily.map((d: any) => d.views));
@@ -1252,7 +1251,7 @@ function Overview({sb, go}: {sb: SupabaseClient; go: (t: string) => void}) {
       <div className="stat-grid">
         <StatTile icon={Users} tone="theme" label="Visitors" value={n(s.traffic.visitors)} sub={`${n(s.traffic.page_views)} page views`}/>
         <StatTile icon={MousePointerClick} tone="blue" label="Job apply clicks" value={n(s.traffic.apply_clicks)}/>
-        <StatTile icon={TrendingUp} tone="amber" label="Sponsored clicks" value={n(s.traffic.sponsored_clicks)} sub={`${n(s.traffic.sponsored_views)} views · ${s.traffic.sponsored_views ? ((s.traffic.sponsored_clicks / s.traffic.sponsored_views) * 100).toFixed(1) : '0'}% click rate`}/>
+        <StatTile icon={TrendingUp} tone="amber" label="Affiliate ad clicks" value={n(s.traffic.sponsored_clicks)} sub={`${n(s.traffic.sponsored_views)} views · ${s.traffic.sponsored_views ? ((s.traffic.sponsored_clicks / s.traffic.sponsored_views) * 100).toFixed(1) : '0'}% click rate`}/>
         <StatTile icon={UserRound} tone="green" label="New sign-ups" value={n(s.users.new)} sub={`${n(s.users.total)} accounts in total`}/>
       </div>
       <p className="overline">Marketplace</p>
@@ -1280,10 +1279,9 @@ function Overview({sb, go}: {sb: SupabaseClient; go: (t: string) => void}) {
       </section>
       <div className="split even">
         <Table title="Top pages" rows={s.top_pages} cols={[['path', 'Page'], ['views', 'Views']]}/>
-        <Table title="Sponsored offers" rows={s.top_sponsored} cols={[['target', 'Offer'], ['views', 'Views'], ['clicks', 'Clicks']]}/>
+        <Table title="Affiliate ads" rows={(s.top_sponsored || []).map((r: any) => ({...r, target: adNames[r.target] || r.target}))} cols={[['target', 'Ad'], ['views', 'Views'], ['clicks', 'Clicks']]}/>
       </div>
       <Table title="Most-clicked jobs" rows={s.top_jobs} cols={[['target', 'Job'], ['clicks', 'Apply clicks']]}/>
-      <p className="muted small">Google AdSense ad clicks happen inside Google’s ad frames and appear in your AdSense reports, not here.</p>
     </div>
   );
 }

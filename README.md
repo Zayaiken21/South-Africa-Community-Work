@@ -1,56 +1,90 @@
 # South Africa Community Work
 
-A mobile-friendly, full-stack local jobs platform for South African cities and towns.
+A job and shift marketplace for South Africa: workers pick up paid hourly shifts (pay held in escrow), businesses hire
+by the shift, and everyone can browse in-person and online jobs. It installs on phones as an app.
 
-## Public frontend
+**Live site:** https://zayaiken21.github.io/South-Africa-Community-Work/
 
-The public website is https://zayaiken21.github.io/South-Africa-Community-Work/ . Root HTML pages and `assets/` are prebuilt for GitHub Pages (main branch, repository root). `.nojekyll` prevents Jekyll from trying to compile the application source.
+## How it fits together
 
-Pages: Home, Find Work, Post a Job, Job Details, Saved Jobs, How It Works, About, Help, Privacy, Terms, and a 404 page. `frontend/` contains the browser application; run `pnpm build:pages` to regenerate all public HTML and assets after frontend edits.
+| Part | Where it runs | What it does |
+|---|---|---|
+| Website (`frontend/` → root `*.html` + `assets/`) | GitHub Pages | Every page people see. React, bundled by `frontend/build.mjs`. |
+| Accounts, shifts, payments, support, ads (`supabase/`) | Supabase | Database with row-level security, file storage, and two server functions for escrow. |
+| Job feed (`scripts/` + `.github/workflows/update-jobs.yml`) | GitHub Actions, every 3 hours | Collects jobs and publishes them to the `jobs-data` branch, which the site reads. |
+| Community posts API (`app/`, `db/`, `drizzle/`, `lib/jobs.ts`) | Hosted separately (Sites) | The older posting API; the site still reads community posts from it. |
 
-The frontend calls the hosted jobs API at https://south-africa-community-work.chummy-tuna-9459.chatgpt.site/api/jobs . This API uses the shared D1 database. CORS allows the GitHub Pages origin, including POST preflight. No privileged API keys or tokens are included in the browser bundle. Both frontend and backend deployments must be updated when API contracts change.
+Setup steps for the database, sign-in emails, payments and the CEO account: **[BACKEND.md](BACKEND.md)**.
+Affiliate ads: **[ADS.md](ADS.md)**. Publishing to Google Play: **[PLAY_STORE.md](PLAY_STORE.md)**.
 
-## Accounts, paid shifts and escrow (October 2026)
+## Code map
 
-- Worker and business accounts (Supabase): profile, bio, skills and a private CV upload.
-- Businesses post in-person shifts with an hourly rate in rand (minimum wage enforced) and book applicants.
-- Pay is held by TradeSafe escrow and released to the worker's bank after the shift; cash shifts are recorded too.
-- CEO/admin dashboard (optional two-step sign-in): traffic, apply and sponsored clicks, users, payments, team and an activity log.
-- Own click tracking plus Google Analytics (after consent). All job pay is shown in rand.
-- Setup steps: **[BACKEND.md](BACKEND.md)**.
+### Website — `frontend/`
 
-## App, location and job feeds (October 2026)
+| File | What it is |
+|---|---|
+| `build.mjs` | Builds the site: bundles the app, writes one HTML page per route, the service worker (`sw.js`), the app manifest and the sitemap. Run with `pnpm build:pages`. |
+| `main.tsx` | The app shell: header, menu, bottom tab bar, footer, and the simple pages (home, job details, saved jobs, how it works, about, privacy, terms, offline, 404). Picks the page to show from the file name. |
+| `JobsView.tsx` | The job board (Home and Find work): location, filters, in-person/online, the job list with affiliate ads between jobs and in the sidebar. Also the shared bottom `Sheet`. |
+| `marketplace.tsx` | Accounts and shifts: sign-in, the Working/Hiring dashboard, posting and managing shifts, picking up shifts, payouts, appeals, two-step sign-in, and the CEO dashboard (overview, payments, team, settings, activity log). |
+| `admin-people.tsx` | CEO dashboard parts: People (cards with pause/ban per side), Live activity feed, and Affiliate ads. |
+| `profile.tsx` | Profile photos, themes, public profile pages and the profile editor. |
+| `support.tsx` | Support page: Randy the assistant, talk-to-a-person queue, request threads, contact card, and the CEO support queue. |
+| `randy-knowledge.ts` | Everything Randy knows: questions people ask and the answers. |
+| `rules.tsx` | The Community rules page. |
+| `ads.tsx` | Affiliate ads: loading, choosing which ad goes where, the ad cards/banners and view counting. |
+| `analytics.ts` | Anonymous page-view and click counting for the dashboard, plus optional Google Analytics after consent. |
+| `backend.ts` | Connection to Supabase, the signed-in account (`useAccount`) and the `Profile` type. |
+| `catalog.ts` | Job feed addresses, job types, money and distance formatting, saved jobs. |
+| `location.ts`, `LocationPicker.tsx` | Finding the visitor's area (GPS, then network estimate) and the place search. |
+| `themes.ts` | The colour themes people can pick for their profile. |
+| `app.css` | All styles. |
 
-- **Installable app.** `manifest.webmanifest`, `sw.js` (offline shell) and `assets/icons/` make the site a PWA. On phones it uses a bottom tab bar and bottom sheets, and follows the system light/dark theme. See `PLAY_STORE.md` to publish it on Google Play as a Trusted Web Activity.
-- **Automatic location.** On first open the app asks for GPS (low-accuracy, fast). If it’s blocked, slow or outside South Africa, it estimates the area from the network (GeoJS, then ipapi) and labels it approximate. People can also tap one of 14 cities or search an address (Photon). Code: `frontend/location.ts`, `frontend/LocationPicker.tsx`.
-- **Job database.** `scripts/fetch-jobs.mjs` runs every 3 hours (`.github/workflows/update-jobs.yml`). It pulls the newest jobs in every field from Jooble (in person, South Africa, when a key is added) and Remotive, Jobicy, Himalayas, Remote OK, Working Nomads and We Work Remotely (online, open to South Africa), adds them to the jobs already held, drops anything older than 30 days (45 for online), and publishes small files to the `jobs-data` branch: `index.json`, `latest.json`, `remote.json`, one file per field (`c-*.json`) and per province (`p-*.json`). That branch is replaced each run, so the repository doesn't grow. The app loads the newest jobs first and fetches a field, province or the online list only when needed.
-  - In-person South African jobs: add a `JOOBLE_API_KEY` secret (https://jooble.org/api/about) under **Settings → Secrets and variables → Actions**. Jooble keys come with 500 requests, so the first run uses one per field (22) and later runs 2 each, lasting about a month; the count is kept in `state.json` on the data branch. If Jooble raises your limit, set repo variables `JOOBLE_TOTAL_LIMIT` (new total) and `JOOBLE_CALLS_PER_RUN`. Community posts are always included.
-  - Run it now from **Actions → Update jobs → Run workflow**.
-- Community posts still come from the D1 API and appear first, marked “Community post”.
-- **CV builder.** `cv-builder.html` is adapted from Blue Resume Builder (A4, South African wording and sample).
-- **Money spots.** `frontend/ads.tsx` fills feed, between-text, sidebar and hanging spots from `affiliates.json` (your affiliate offers) and `ads-config.json` (Google AdSense); preview with `?adpreview=1`. Guide: `ADS.md`.
-- **Brand.** Logo files, lockups and app icons are in `brand/`, generated by `scripts/make-brand.mjs`. Colours, type and usage rules are in the brand guide.
+Root `*.html`, `assets/community-app.js|css`, `sw.js`, `manifest.webmanifest` and `sitemap.xml` are **generated** by
+`build.mjs` — edit `frontend/` and rebuild instead. `cv-builder.html` is the standalone CV builder.
 
-## First version
-- Location from browser GPS or a manually entered map coordinate, with free-text city/town names and all nine provinces.
-- Jobs within the worker's selected radius (1–200 km, default 25), ordered nearest first.
-- Server-side filtering also respects the poster's hiring radius.
-- Search, category, minimum hourly pay, highest-pay and newest sorting.
-- Shared persistent D1 job records, not browser-only listings or sample jobs.
-- Posting form: title, description, poster/business, city, province, precise workplace coordinates, category, hiring radius, pay in rand (hourly or total), shift hours, SAST start time, and public contact details.
-- Expired shifts are excluded. API validates all fields and coordinates and uses parameterized database operations.
+Site settings you can change on GitHub without rebuilding: `backend-config.json` (Supabase address and public key),
+`support-config.json` (support email, phone, WhatsApp, hours), `analytics-config.json` (Google Analytics ID).
 
-## Architecture and deployment
-React / Vinext with Cloudflare Workers and D1. `app/api/jobs/route.ts` is the database-backed API. `db/schema.ts` and `drizzle/` own the database schema. `.openai/hosting.json` binds `DB` for the hosted Sites deployment.
+### Database — `supabase/`
 
-Install dependencies with `pnpm install`, generate schema migrations with `pnpm db:generate`, typecheck with `pnpm exec tsc --noEmit`, and build with `pnpm build`. The repository retains the Sites build helpers and deployment configuration for reproducibility. A server runtime and D1 are required; GitHub Pages alone cannot run this API. GitHub changes do not automatically redeploy the hosted Site.
+| Path | What it is |
+|---|---|
+| `migrations/20261028000000_marketplace.sql` | The base database (run once). |
+| `migrations/2026102812…` to `…300000_…sql` | Updates 1–10, each safe to run again. |
+| `run-updates.sql` | Updates 1–10 in one file — the easy way to bring the database up to date. |
+| `repair-accounts.sql` | Fixes accounts created before the database existed and makes the CEO account staff. |
+| `functions/payments`, `functions/tradesafe-callback`, `functions/_shared` | Server functions for TradeSafe escrow. |
+| `email-templates/` | Branded sign-up, password-reset and other emails to paste into Supabase. |
+| `tests/security.test.mjs` | Tests that the database rules block what they should (run instructions at the top of the file). |
 
-## Release scope
-This early-access frontend is public. A fuller hiring platform still needs user accounts, verified poster ownership, moderation and editing/removal, abuse controls, a privacy policy, and an operational employment/payment model. Do not treat browser coordinates as verified identity or anti-spoofing protection. The radius filter is a server-side distance rule using client-supplied coordinates; manual coordinates are deliberately supported. Mainland coordinate bounds are sanity checks rather than a national-boundary polygon. No GPS history is retained in the database. Job coordinates and public business contact details are returned only in matching listings.
+### Job feed — `scripts/`
 
-Workers view details and contact the poster directly. There is no shift booking, application management, payroll, payment collection, penalty deduction or payment-provider integration in this version. Posted wages are advertised compensation, not a posting charge. Search distances are straight-line estimates, not route or transport estimates. Posting start times use South Africa Standard Time (UTC+02:00).
+| File | What it does |
+|---|---|
+| `fetch-jobs.mjs` | Collects jobs from employer career sites, Jooble and online job boards, sorts them by type and province, and writes the feed files. |
+| `ats.mjs` | Reads employers' hiring-system feeds (the in-person jobs). |
+| `sa-employers.mjs` | The list of South African employers to check. |
+| `sa-places.mjs` | South African towns and provinces, used to place each job. |
+| `make-brand.mjs` | Draws the logo and app icons in `brand/` and `play-store/`. |
 
-The app does not claim any business partnerships or display fabricated listings. Public informational pages have canonical URLs, descriptions and a sitemap. Dynamic job and device-specific saved-job pages are noindex.
+### Community posts API and its hosting
 
-## Verification
-`node --experimental-strip-types --test tests/jobs.test.ts` checks distance calculations, both radius limits, edge cases and listing validation. TypeScript and a production build validate the application source. Browser visual QA was unavailable in the build environment.
+`app/` (page and `api/jobs` route), `db/` and `drizzle/` (D1 database schema), `lib/jobs.ts` (shared rules and
+validation, tested by `tests/jobs.test.ts`). `vite.config.ts`, `next.config.ts`, `build/`, `lib/connector*`,
+`scripts/run-framework.mjs`, `scripts/install-pnpm.sh`, `scripts/*install*.mjs`, `scripts/sites-env.*`,
+`scripts/execution-profile.mjs`, `scripts/build-verified.sh`, `scripts/connector-preview/` and `.openai/hosting.json`
+are that host's build setup — keep them so the API can still be rebuilt.
+
+### Other
+
+`brand/` logo files · `play-store/` store graphics · `assets/icons/` app icons · `data/jobs-feed.json` fallback feed ·
+`jooble-boost.json` optional one-off Jooble boost.
+
+## Working on it
+
+```sh
+pnpm install          # once
+pnpm build:pages      # rebuild the website after changing frontend/
+npx tsc --noEmit -p . # type check
+```

@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {
   MapPin, Clock, Navigation, ArrowRight, ArrowLeft, Plus, Check, Bookmark, Search, ShieldCheck, Mail, Globe,
-  BriefcaseBusiness, House, Menu, Download, Info, CircleHelp, Lock, FileText, ArrowUpRight, X, Users, Laptop, FileUser,
+  BriefcaseBusiness, House, Menu, Download, Info, Lock, FileText, X, Laptop, FileUser,
   CalendarDays, UserRound, Building2, Wallet, LifeBuoy, BookOpen,
 } from 'lucide-react';
 import JobsView, {LocationPicker, Sheet, useAreaLocation} from './JobsView';
@@ -14,7 +14,7 @@ import {modes, staffView} from './backend';
 import {useAccount} from './backend';
 import {consent, gaConfigured, startTracking} from './analytics';
 import {API, money, milesLabel, savedJobs, setSavedJobs, toggleSaved, type CommunityJob, type SavedJob} from './catalog';
-import {AdSlot, HangingOffer, initAds} from './ads';
+import {AdSlot, HangingOffer} from './ads';
 import './app.css';
 
 const file = window.location.pathname.split('/').pop() || 'index.html';
@@ -43,9 +43,8 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 const grow = (el: HTMLTextAreaElement) => { const min = el.classList.contains('one-line') ? 48 : 110; el.style.height = 'auto'; el.style.height = Math.max(min, el.scrollHeight + 2) + 'px'; };
 ['input', 'focusin'].forEach(ev => document.addEventListener(ev, e => { if (e.target instanceof HTMLTextAreaElement && !e.target.closest('.randy-input')) grow(e.target); }));
 
-// Sponsored offers and ads only appear on the job pages: Home, Find work (in person and online) and job details.
+// Affiliate ads only appear on the job pages: Home, Find work (in person and online) and job details.
 const adPages = ['index.html', 'find-work.html', 'job.html'];
-if (adPages.includes(file)) initAds();
 if (file !== 'admin.html') startTracking();
 
 function useConsentBanner() {
@@ -193,6 +192,20 @@ function HirePage() {
   );
 }
 
+// A job's description with an affiliate ad placed inside the text, the way news and blog sites do:
+// after the first paragraph when there are several, otherwise straight after the text.
+function InText({text, category}: {text: string; category: string}) {
+  const paras = text.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  const cut = paras.length > 1 ? 1 : paras.length;
+  return (
+    <>
+      {paras.slice(0, cut).map((p, i) => <p className="prose-text" key={i}>{p}</p>)}
+      <AdSlot spot="article" index={0} category={category} mode="onsite"/>
+      {paras.slice(cut).map((p, i) => <p className="prose-text" key={'b' + i}>{p}</p>)}
+    </>
+  );
+}
+
 function Detail() {
   const id = new URLSearchParams(window.location.search).get('id');
   const {location, locating, choose} = useAreaLocation();
@@ -244,8 +257,7 @@ function Detail() {
                   <span><MapPin size={17}/>{job.city}</span>
                 </div>
                 <h3>About this job</h3>
-                <p className="prose-text">{job.description}</p>
-                <AdSlot spot="article" index={0} category={job.category} mode="onsite"/>
+                <InText text={job.description} category={job.category}/>
                 <h3>When</h3>
                 <p className="prose-text">{new Date(job.start).toLocaleString('en-ZA', {timeZone: 'Africa/Johannesburg', dateStyle: 'full', timeStyle: 'short'})} SAST</p>
                 <button className={'btn ' + (saved ? 'btn-dark' : 'btn-outline')} onClick={save}><Bookmark size={16} fill={saved ? 'currentColor' : 'none'}/>{saved ? 'Saved' : 'Save job'}</button>
@@ -372,10 +384,8 @@ function Privacy() {
         <p>In-person listings come from employers’ own careers pages, and online listings from public job boards (such as Remotive, Jobicy, Himalayas, Remote OK, Working Nomads and We Work Remotely). When you tap Apply you leave this app, and that site’s own privacy policy applies.</p>
         <h2>CV builder</h2>
         <p>What you type into the CV builder stays in this browser on your device. Your PDF or Word file is created on your device too; nothing is uploaded.</p>
-        <h2>Advertising</h2>
-        <p>Community Work is free because of advertising. We use Google AdSense, which may use cookies and your device’s advertising ID to show ads, including ads based on your interests, and to measure them. Google and its partners act on their own privacy policies; see <a className="link" href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noreferrer">how Google uses information from sites that use its services</a>. You can turn off personalised ads at <a className="link" href="https://adssettings.google.com" target="_blank" rel="noreferrer">Google’s Ad Settings</a>. Google ads are labelled “Advertisement”.</p>
-        <h2>Sponsored and affiliate links</h2>
-        <p>Cards and bars labelled “Sponsored” link to partners who may pay us a commission when you view, click or sign up. Their sites have their own privacy policies and may use cookies to track the referral. We don’t share your saved jobs or CV with them.</p>
+        <h2>Affiliate ads</h2>
+        <p>Community Work is free because of affiliate ads. Ads labelled “Sponsored” on the job pages link to partners who may pay us a commission when you click or sign up. Their sites have their own privacy policies and may use cookies to track the referral. We count views and clicks on these ads anonymously, and we never share your saved jobs, profile or CV with partners.</p>
         <h2>Service providers</h2>
         <p>GitHub Pages hosts the app. Supabase hosts accounts, shifts and usage statistics. TradeSafe handles escrow payments. Place search and place names use Photon (Komoot) with OpenStreetMap data. These services receive the network information needed to work.</p>
         <h2>Your device data</h2>

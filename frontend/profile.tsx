@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {
   BadgeCheck, Camera, Car, Check, Clock, FileText, FileUp, Globe, GraduationCap, Languages, LoaderCircle, MapPin, Phone,
-  Plus, Trash2, X, Briefcase, CalendarDays, Building2, Star, Users, ArrowUpRight, Palette, Eye, Lock, UserRound, Sparkles, Ban,
+  Plus, Trash2, X, Briefcase, CalendarDays, Building2, Star, ArrowUpRight, Palette, Eye, Lock, UserRound, Sparkles, Ban,
 } from 'lucide-react';
 import {useAccount, modes, type Experience, type Profile} from './backend';
 import {THEMES, theme, themeStyle} from './themes';
@@ -253,7 +253,6 @@ export function ProfileEditor({sb, profile, onSaved, mode}: {sb: SupabaseClient;
   const [skill, setSkill] = useState(''), [lang, setLang] = useState('');
   const [busy, setBusy] = useState(false), [msg, setMsg] = useState<{kind: 'error' | 'ok'; text: string} | null>(null);
   const [uploading, setUploading] = useState(false), [preview, setPreview] = useState(false);
-  const m = modes(p);
   const set = <K extends keyof Profile>(k: K, v: Profile[K]) => { setP(x => ({...x, [k]: v})); setMsg(null); };
   const toggleIn = (k: 'availability' | 'languages', v: string) => set(k, (p[k] ?? []).includes(v) ? (p[k] ?? []).filter(x => x !== v) : [...(p[k] ?? []), v]);
   const addSkill = (s: string) => { const v = s.trim().slice(0, 40); if (v && !p.skills.includes(v) && p.skills.length < 30) set('skills', [...p.skills, v]); setSkill(''); };
