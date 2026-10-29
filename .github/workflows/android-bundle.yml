@@ -45,7 +45,8 @@ jobs:
           npm install -g @bubblewrap/cli@1.27.0 2>&1 | tail -2
           cp android/twa-manifest.json twa/
           cd twa
-          yes "" | bubblewrap update --skipVersionUpgrade 2>&1 | tee ../out/build-log.txt
+          bubblewrap update --skipVersionUpgrade < /dev/null 2>&1 | tee ../out/build-log.txt
+          echo "--- gradle bundleRelease ---" >> ../out/build-log.txt
           chmod +x gradlew
           ./gradlew bundleRelease --no-daemon --stacktrace 2>&1 | tee -a ../out/build-log.txt
           cp app/build/outputs/bundle/release/*.aab ../out/app-release-unsigned.aab
