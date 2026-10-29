@@ -1,0 +1,5 @@
+Expected: package=communityworksouthafrica.app versionCode=1 versionName=1.0.0
+package="communityworksouthafrica.app"
+android:versionCode="1"
+android:versionName="1.0.0"
+VERIFIED

@@ -1,0 +1,62 @@
+{
+  "packageId": "communityworksouthafrica.app",
+  "host": "zayaiken21.github.io",
+  "name": "Community Work South Africa",
+  "launcherName": "Community Work",
+  "display": "standalone",
+  "orientation": "portrait",
+  "themeColor": "#176B4E",
+  "themeColorDark": "#0E1613",
+  "navigationColor": "#F5F6F1",
+  "navigationColorDark": "#0E1613",
+  "navigationDividerColor": "#E1E6DD",
+  "navigationDividerColorDark": "#26352E",
+  "backgroundColor": "#F5F6F1",
+  "enableNotifications": false,
+  "startUrl": "/South-Africa-Community-Work/index.html?source=twa",
+  "iconUrl": "https://zayaiken21.github.io/South-Africa-Community-Work/assets/icons/icon-512.png",
+  "maskableIconUrl": "https://zayaiken21.github.io/South-Africa-Community-Work/assets/icons/maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./upload-key.jks",
+    "alias": "upload"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "Paid shifts",
+      "shortName": "Shifts",
+      "url": "/South-Africa-Community-Work/shifts.html",
+      "chosenIconUrl": "https://zayaiken21.github.io/South-Africa-Community-Work/assets/icons/icon-192.png"
+    },
+    {
+      "name": "Online jobs",
+      "shortName": "Online",
+      "url": "/South-Africa-Community-Work/find-work.html?mode=remote",
+      "chosenIconUrl": "https://zayaiken21.github.io/South-Africa-Community-Work/assets/icons/icon-192.png"
+    },
+    {
+      "name": "Support",
+      "shortName": "Support",
+      "url": "/South-Africa-Community-Work/support.html",
+      "chosenIconUrl": "https://zayaiken21.github.io/South-Africa-Community-Work/assets/icons/icon-192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://zayaiken21.github.io/South-Africa-Community-Work/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://zayaiken21.github.io/South-Africa-Community-Work/",
+  "minSdkVersion": 24,
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "appVersion": "1.0.0"
+}
