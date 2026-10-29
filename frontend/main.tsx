@@ -10,7 +10,7 @@ import {AccountPage, AdminPage, ConsentBanner, ShiftsPage} from './marketplace';
 import {Avatar, ProfilePage} from './profile';
 import {SupportPage} from './support';
 import {RulesPage} from './rules';
-import {modes} from './backend';
+import {modes, staffView} from './backend';
 import {useAccount} from './backend';
 import {consent, gaConfigured, startTracking} from './analytics';
 import {API, money, milesLabel, savedJobs, setSavedJobs, toggleSaved, type CommunityJob, type SavedJob} from './catalog';
@@ -39,9 +39,13 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded && navigator.serviceWorker.controller) { reloaded = true; location.reload(); } });
 }
 
-// Ads stay off account, admin, legal and offline pages.
-const adFreePages = ['post-job.html', 'account.html', 'admin.html', 'profile.html', 'privacy.html', 'terms.html', 'offline.html', '404.html'];
-if (!adFreePages.includes(file)) initAds();
+// Text boxes grow with what people type, and wrap long lines, so they can always read everything they've written.
+const grow = (el: HTMLTextAreaElement) => { const min = el.classList.contains('one-line') ? 48 : 110; el.style.height = 'auto'; el.style.height = Math.max(min, el.scrollHeight + 2) + 'px'; };
+['input', 'focusin'].forEach(ev => document.addEventListener(ev, e => { if (e.target instanceof HTMLTextAreaElement && !e.target.closest('.randy-input')) grow(e.target); }));
+
+// Sponsored offers and ads only appear on the job pages: Home, Find work (in person and online) and job details.
+const adPages = ['index.html', 'find-work.html', 'job.html'];
+if (adPages.includes(file)) initAds();
 if (file !== 'admin.html') startTracking();
 
 function useConsentBanner() {
@@ -58,6 +62,8 @@ function App() {
   const acct = useAccount();
   const banner = useConsentBanner();
   const signedIn = !!acct.session;
+  const ceoView = staffView(acct.staff, acct.profile);
+  const teamLabel = acct.staff === 'ceo' ? 'CEO' : 'Admin';
   const tab = file === 'index.html' ? 'home' : file === 'find-work.html' ? (mode === 'remote' ? 'online' : 'jobs') : file === 'shifts.html' ? 'shifts'
     : file === 'saved-jobs.html' ? 'saved' : file === 'support.html' || file === 'help.html' ? 'support' : file === 'account.html' || file === 'admin.html' || file === 'post-job.html' || file === 'profile.html' ? 'account' : 'more';
   return (
@@ -79,8 +85,8 @@ function App() {
           {install && <button className="btn btn-outline btn-sm hide-sm" onClick={install}><Download size={16}/>Install app</button>}
           {signedIn
             ? <a className="account-chip hide-sm" href="account.html" title="My account">
-                {(() => { const biz = acct.profile && modes(acct.profile).active === 'business'; return <Avatar url={biz ? acct.profile?.business_avatar_url : acct.profile?.avatar_url} name={biz ? acct.profile?.business_name : acct.profile?.full_name} size={34} themeId={acct.profile?.theme}/>; })()}
-                <span>{acct.profile && modes(acct.profile).active === 'business' ? 'Hiring' : 'Working'}</span>
+                {ceoView ? <span className="team-chip-ic"><ShieldCheck size={18}/></span> : (() => { const biz = acct.profile && modes(acct.profile).active === 'business'; return <Avatar url={biz ? acct.profile?.business_avatar_url : acct.profile?.avatar_url} name={biz ? acct.profile?.business_name : acct.profile?.full_name} size={34} themeId={acct.profile?.theme}/>; })()}
+                <span>{ceoView ? teamLabel : acct.profile && modes(acct.profile).active === 'business' ? 'Hiring' : 'Working'}</span>
               </a>
             : <><a className="btn btn-outline btn-sm hide-sm" href="account.html">Sign in</a><a className="btn btn-primary btn-sm hide-sm" href="account.html?signup=1&type=business"><Building2 size={16}/>Hire workers</a></>}
           <button className="icon-btn show-sm" aria-label="More" onClick={() => setMore(true)}><Menu size={22}/></button>
@@ -117,14 +123,14 @@ function App() {
         <small>South Africa · All nine provinces · Some links are sponsored or affiliate links: we may earn a commission, at no cost to you.</small>
       </footer>
 
-      {!adFreePages.includes(file) && <HangingOffer/>}
+      {adPages.includes(file) && <HangingOffer/>}
 
       <nav className="tabbar" aria-label="App">
         <a className={tab === 'home' || tab === 'jobs' || tab === 'online' ? 'on' : ''} href="index.html"><House size={22}/><span>Jobs</span></a>
         <a className={tab === 'saved' ? 'on' : ''} href="saved-jobs.html"><Bookmark size={22}/><span>Saved</span></a>
         <a className={'post' + (tab === 'shifts' ? ' on' : '')} href="shifts.html"><span className="post-fab"><CalendarDays size={24}/></span><span>Shifts</span></a>
         <a className={tab === 'support' ? 'on' : ''} href="support.html"><LifeBuoy size={22}/><span>Support</span></a>
-        <a className={tab === 'account' ? 'on' : ''} href="account.html"><UserRound size={22}/><span>{signedIn ? 'Account' : 'Sign in'}</span></a>
+        <a className={tab === 'account' ? 'on' : ''} href="account.html">{ceoView ? <ShieldCheck size={22}/> : <UserRound size={22}/>}<span>{ceoView ? teamLabel : signedIn ? 'Account' : 'Sign in'}</span></a>
       </nav>
 
       <ConsentBanner show={banner.show} onChoose={banner.choose}/>
@@ -133,7 +139,7 @@ function App() {
         <Sheet title="More" onClose={() => setMore(false)}>
           <div className="menu-list">
             {install && <button onClick={() => { setMore(false); install(); }}><Download size={20}/>Install the app</button>}
-            {acct.staff && <a href="admin.html"><ShieldCheck size={20}/>{acct.staff === 'ceo' ? 'CEO dashboard' : 'Admin dashboard'}</a>}
+            {acct.staff && !ceoView && <a href="admin.html"><ShieldCheck size={20}/>{acct.staff === 'ceo' ? 'CEO dashboard' : 'Admin dashboard'}</a>}
             {!signedIn && <a href="account.html?signup=1&type=business"><Building2 size={20}/>Hire workers for shifts</a>}
             <a href="cv-builder.html"><FileUser size={20}/>Build your CV</a>
             <a href="how-it-works.html"><BriefcaseBusiness size={20}/>How it works</a>
@@ -300,7 +306,6 @@ function How() {
         <div className="feature"><MapPin size={22}/><h3>In person across SA</h3><p>Jobs from employers around the country, sorted by how close they are to you.</p></div>
         <div className="feature"><Laptop size={22}/><h3>Online jobs</h3><p>Remote roles open to people in South Africa. Apply on the original job site.</p></div>
       </div>
-      <AdSlot spot="article"/>
       <div className="split even">
         <section className="card-panel">
           <Search size={22}/>

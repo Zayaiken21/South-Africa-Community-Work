@@ -4,7 +4,10 @@
 import {createClient, type Session, type SupabaseClient} from '@supabase/supabase-js';
 import {useEffect, useState} from 'react';
 
-type Config = {supabaseUrl: string; supabaseAnonKey: string};
+type Config = {supabaseUrl: string; supabaseAnonKey: string; google?: boolean};
+let flags: {google: boolean} = {google: false};
+// Optional sign-in methods switched on in backend-config.json ("google": true once Google is set up in Supabase).
+export const authFlags = () => backend().then(() => flags);
 let clientPromise: Promise<SupabaseClient | null> | null = null;
 
 export function backend(): Promise<SupabaseClient | null> {
@@ -13,6 +16,7 @@ export function backend(): Promise<SupabaseClient | null> {
       .then(r => (r.ok ? (r.json() as Promise<Config>) : null))
       .then((c: Config | null) => {
         if (!c?.supabaseUrl || !c?.supabaseAnonKey || !/^https:\/\//.test(c.supabaseUrl)) return null;
+        flags = {google: c.google === true};
         return createClient(c.supabaseUrl, c.supabaseAnonKey, {auth: {persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce'}});
       })
       .catch(() => null);
@@ -31,18 +35,24 @@ export type Profile = {
   business_hours?: string | null; website?: string | null; created_at?: string;
   strikes?: number; suspended_reason?: string | null;
   business_bio?: string | null; business_avatar_url?: string | null; banned?: boolean;
+  // Update 10: a side can be banned on its own; team accounts open in the CEO view unless they switch it off.
+  work_banned?: boolean; hire_banned?: boolean; ban_reason?: string | null; staff_view?: boolean;
 };
 export type Experience = {role: string; place: string; years?: string; note?: string};
 
 // Which modes an account has switched on, with fallbacks for accounts made before upgrade 2.
 export function modes(p: Profile) {
-  const work = p.can_work ?? p.account_type === 'worker';
-  const hire = p.can_hire ?? p.account_type === 'business';
+  const work = !p.work_banned && (p.can_work ?? p.account_type === 'worker');
+  const hire = !p.hire_banned && (p.can_hire ?? p.account_type === 'business');
   const active: 'worker' | 'business' = p.active_mode ?? p.account_type;
-  return {work, hire, active, dual: work && hire};
+  // canSwitch: false when one side is banned, so the Working/Hiring switch disappears completely.
+  return {work, hire, active, dual: work && hire, canSwitch: !p.work_banned && !p.hire_banned};
 }
 
 // Session + profile + staff role, kept in sync with sign-in changes.
+// Team members see the site as the CEO/admin by default; they can switch their own working/hiring account on.
+export const staffView = (staff: string | null, p: Profile | null) => !!staff && (p?.staff_view ?? true);
+
 export function useAccount() {
   const [state, setState] = useState<{ready: boolean; sb: SupabaseClient | null; session: Session | null; profile: Profile | null; staff: 'ceo' | 'admin' | null; recovery: boolean}>(
     {ready: false, sb: null, session: null, profile: null, staff: null, recovery: false});

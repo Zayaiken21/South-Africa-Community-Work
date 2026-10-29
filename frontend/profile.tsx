@@ -326,9 +326,9 @@ export function ProfileEditor({sb, profile, onSaved, mode}: {sb: SupabaseClient;
           <section className="card-panel form section-card">
             <header className="sec-head"><UserRound size={18}/><div><h2>About you</h2><p>A short, friendly introduction.</p></div></header>
             <label className="field">Full name<input value={p.full_name || ''} onChange={e => set('full_name', e.target.value)} maxLength={120} required/></label>
-            <label className="field">Headline<input value={p.headline || ''} onChange={e => set('headline', e.target.value)} maxLength={120} placeholder="e.g. Reliable waiter and barista, 3 years’ experience"/></label>
+            <label className="field">Headline<textarea className="wrap-text one-line" rows={1} value={p.headline || ''} onChange={e => set('headline', e.target.value.replace(/\n/g, ' '))} onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} maxLength={120} placeholder="e.g. Reliable waiter and barista, 3 years’ experience"/><small>{(p.headline || '').length}/120 · shown under your name</small></label>
             <label className="field">Who you are
-              <textarea rows={5} value={p.bio || ''} onChange={e => set('bio', e.target.value)} maxLength={1000} placeholder="Your experience, what you’re good at, and what kind of shifts you’re looking for."/>
+              <textarea className="wrap-text" rows={5} value={p.bio || ''} onChange={e => set('bio', e.target.value)} maxLength={1000} placeholder="Your experience, what you’re good at, and what kind of shifts you’re looking for."/>
               <small>{(p.bio || '').length}/1000</small>
             </label>
           </section>
@@ -340,11 +340,11 @@ export function ProfileEditor({sb, profile, onSaved, mode}: {sb: SupabaseClient;
               <label className="field">Type of business<input value={p.business_type || ''} onChange={e => set('business_type', e.target.value)} maxLength={60} placeholder="e.g. Restaurant, warehouse, events"/></label>
             </div>
             <label className="field">What you do
-              <textarea rows={5} value={p.business_bio || ''} onChange={e => set('business_bio', e.target.value)} maxLength={1000} placeholder="What your business does and what a shift with you is like."/>
+              <textarea className="wrap-text" rows={5} value={p.business_bio || ''} onChange={e => set('business_bio', e.target.value)} maxLength={1000} placeholder="What your business does and what a shift with you is like."/>
               <small>{(p.business_bio || '').length}/1000</small>
             </label>
             <div className="grid-2">
-              <label className="field">Trading hours<input value={p.business_hours || ''} onChange={e => set('business_hours', e.target.value)} maxLength={120} placeholder="Mon–Sat, 08:00–18:00"/></label>
+              <label className="field">Trading hours<textarea className="wrap-text one-line" rows={1} value={p.business_hours || ''} onChange={e => set('business_hours', e.target.value.replace(/\n/g, ' '))} onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} maxLength={120} placeholder="Mon–Sat, 08:00–18:00"/></label>
               <label className="field">Website (optional)<input value={p.website || ''} onChange={e => set('website', e.target.value)} maxLength={200} inputMode="url" placeholder="www.example.co.za"/></label>
             </div>
             <div className="grid-2">
@@ -382,7 +382,7 @@ export function ProfileEditor({sb, profile, onSaved, mode}: {sb: SupabaseClient;
                 </select>
               </label>
             </div>
-            <label className="field">Highest education (optional)<input value={p.education || ''} onChange={e => set('education', e.target.value)} maxLength={200} placeholder="e.g. Matric, N4 Hospitality, Diploma"/></label>
+            <label className="field">Highest education (optional)<textarea className="wrap-text one-line" rows={1} value={p.education || ''} onChange={e => set('education', e.target.value.replace(/\n/g, ' '))} onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} maxLength={200} placeholder="e.g. Matric, N4 Hospitality, Diploma"/></label>
           </section>
         )}
 

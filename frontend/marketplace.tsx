@@ -5,11 +5,13 @@ import {
   CalendarDays, Users, BadgeCheck, Search, BarChart3, Activity, KeyRound, ArrowUpRight, Banknote, Lock, RefreshCw, Briefcase, Eye,
   LayoutDashboard, Settings, Trash2, Sparkles, Palette, Globe, ArrowRight, CheckCircle2, Repeat, Ban, Zap, AlertTriangle, Gavel, TrendingUp, MousePointerClick,
 } from 'lucide-react';
-import {useAccount, callFunction, errorText, modes, type Profile} from './backend';
+import {useAccount, callFunction, errorText, modes, staffView, authFlags, type Profile} from './backend';
 import {Avatar, ProfileEditor} from './profile';
 import {themeStyle} from './themes';
 import {track} from './analytics';
 import {SupportAdmin} from './support';
+import {PeopleAdmin, LiveFeed, AdsAdmin} from './admin-people';
+import {Megaphone, EyeOff, Mail} from 'lucide-react';
 import {LifeBuoy as SupportIcon} from 'lucide-react';
 import {LocationPicker, Sheet, useAreaLocation} from './JobsView';
 import {browseCategories, money, milesLabel, milesToKm, type Location} from './catalog';
@@ -42,8 +44,9 @@ export function AccountPage() {
   if (!acct.ready) return <div className="page"><div className="card-panel center"><span className="spinner"/>Loading…</div></div>;
   if (!acct.sb) return <NotConfigured/>;
   if (acct.recovery) return <div className="page reading"><NewPassword sb={acct.sb}/></div>;
-  if (!acct.session) return <div className="page reading"><AuthForm sb={acct.sb}/></div>;
+  if (!acct.session) return <div className="page auth-page"><AuthForm sb={acct.sb}/></div>;
   if (!acct.profile) return <MissingProfile sb={acct.sb} email={acct.session.user.email || ''} reload={acct.reload}/>;
+  if (staffView(acct.staff, acct.profile)) return <AdminPage/>;
   return <TwoStepGate sb={acct.sb} token={acct.session.access_token} reload={acct.reload}><Dashboard sb={acct.sb} profile={acct.profile} email={acct.session.user.email || ''} staff={acct.staff} reload={acct.reload}/></TwoStepGate>;
 }
 
@@ -70,71 +73,151 @@ function MissingProfile({sb, email, reload}: {sb: SupabaseClient; email: string;
   );
 }
 
-function AuthForm({sb}: {sb: SupabaseClient}) {
-  const [mode, setMode] = useState<'in' | 'up' | 'reset'>(params.get('signup') ? 'up' : 'in');
-  const [type, setType] = useState<'worker' | 'business'>(params.get('type') === 'business' ? 'business' : 'worker');
-  const [busy, setBusy] = useState(false), [msg, setMsg] = useState<{kind: 'error' | 'ok'; text: string} | null>(null);
-  const redirect = location.origin + location.pathname.replace(/[^/]*$/, '') + 'account.html';
+const friendly = (m: string) =>
+  /invalid login credentials/i.test(m) ? 'That email and password don’t match. Check for typos, or reset your password below.'
+  : /email not confirmed/i.test(m) ? 'Please confirm your email first — tap the link we sent you. Can’t find it? Resend it below.'
+  : /rate limit|too many/i.test(m) ? 'Too many tries for now. Wait a few minutes, then try again.'
+  : /already registered|already been registered/i.test(m) ? 'That email already has an account. Sign in instead, or reset your password.'
+  : /network|fetch/i.test(m) ? 'No connection. Check your internet and try again.'
+  : m;
 
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
-    setBusy(true); setMsg(null);
+function strength(pw: string): [number, string] {
+  if (!pw) return [0, ''];
+  let n = 0;
+  if (pw.length >= 10) n++; if (pw.length >= 14) n++; if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) n++; if (/\d/.test(pw)) n++; if (/[^A-Za-z0-9]/.test(pw)) n++;
+  return pw.length < 10 ? [1, 'Too short'] : n <= 2 ? [2, 'Okay'] : n <= 3 ? [3, 'Good'] : [4, 'Strong'];
+}
+
+function PasswordField({mode, value, onChange}: {mode: 'in' | 'up'; value: string; onChange: (v: string) => void}) {
+  const [show, setShow] = useState(false), [caps, setCaps] = useState(false);
+  const [lvl, label] = strength(value);
+  return (
+    <label className="field">Password
+      <span className="pw-wrap">
+        <input name="password" type={show ? 'text' : 'password'} required minLength={mode === 'up' ? 10 : 1} value={value} onChange={e => onChange(e.target.value)}
+          onKeyUp={e => setCaps(e.getModifierState?.('CapsLock'))} autoComplete={mode === 'up' ? 'new-password' : 'current-password'}/>
+        <button type="button" className="pw-eye" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}>{show ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
+      </span>
+      {caps && <small className="warn-text">Caps Lock is on.</small>}
+      {mode === 'up' && <span className="pw-meter" data-level={lvl}><i/><i/><i/><i/><small>{value ? label : 'At least 10 characters. A short sentence works well.'}</small></span>}
+    </label>
+  );
+}
+
+function AuthForm({sb}: {sb: SupabaseClient}) {
+  const [mode, setMode] = useState<'in' | 'up' | 'reset' | 'link'>(params.get('signup') ? 'up' : 'in');
+  const [type, setType] = useState<'worker' | 'business'>(params.get('type') === 'business' ? 'business' : 'worker');
+  const [email, setEmail] = useState(() => { try { return localStorage.getItem('cw-last-email') || ''; } catch { return ''; } });
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false), [msg, setMsg] = useState<{kind: 'error' | 'ok'; text: string} | null>(null);
+  const [resend, setResend] = useState(false), [sent, setSent] = useState(false), [google, setGoogle] = useState(false);
+  useEffect(() => { authFlags().then(f => setGoogle(f.google)); }, []);
+  const redirect = location.origin + location.pathname.replace(/[^/]*$/, '') + 'account.html';
+  const go = (m: typeof mode) => { setMode(m); setMsg(null); setResend(false); setSent(false); };
+  const remember = (e: string) => { try { localStorage.setItem('cw-last-email', e); } catch { /* private mode */ } };
+
+  async function submit(ev: React.FormEvent<HTMLFormElement>) {
+    ev.preventDefault();
+    const f = Object.fromEntries(new FormData(ev.currentTarget)) as Record<string, string>;
+    const em = email.trim().toLowerCase();
+    setBusy(true); setMsg(null); setResend(false);
     try {
       if (mode === 'in') {
-        const {error} = await sb.auth.signInWithPassword({email: f.email.trim(), password: f.password});
-        if (error) throw error;
-        track('sign_in');
+        const {error} = await sb.auth.signInWithPassword({email: em, password: pw});
+        if (error) { if (/not confirmed/i.test(error.message)) setResend(true); throw error; }
+        remember(em); track('sign_in');
       } else if (mode === 'up') {
-        if (f.password.length < 10) throw new Error('Use at least 10 characters for your password.');
-        const {error} = await sb.auth.signUp({email: f.email.trim(), password: f.password, options: {
+        if (pw.length < 10) throw new Error('Use at least 10 characters for your password.');
+        const {error} = await sb.auth.signUp({email: em, password: pw, options: {
           emailRedirectTo: redirect, data: {account_type: type, full_name: f.full_name?.trim(), business_name: f.business_name?.trim()}}});
         if (error) throw error;
-        track('sign_up', type);
-        setMsg({kind: 'ok', text: 'Check your email and tap the link to confirm your account, then sign in.'});
+        remember(em); track('sign_up', type); setSent(true);
+      } else if (mode === 'link') {
+        const {error} = await sb.auth.signInWithOtp({email: em, options: {shouldCreateUser: false, emailRedirectTo: redirect}});
+        if (error && !/signups not allowed|not found/i.test(error.message)) throw error;
+        remember(em); setSent(true);
       } else {
-        const {error} = await sb.auth.resetPasswordForEmail(f.email.trim(), {redirectTo: redirect});
+        const {error} = await sb.auth.resetPasswordForEmail(em, {redirectTo: redirect});
         if (error) throw error;
-        setMsg({kind: 'ok', text: 'If that email has an account, we’ve sent a link to reset your password.'});
+        setSent(true);
       }
-    } catch (err) { setMsg({kind: 'error', text: errorText(err)}); }
+    } catch (err) { setMsg({kind: 'error', text: friendly(errorText(err))}); }
     finally { setBusy(false); }
   }
 
-  return (
-    <section className="card-panel auth">
-      <div className="page-head">
-        <p className="overline">{mode === 'up' ? 'Create your account' : mode === 'in' ? 'Welcome back' : 'Reset password'}</p>
-        <h1>{mode === 'up' ? (type === 'business' ? 'Hire people for shifts' : 'Find shifts near you') : mode === 'in' ? 'Sign in' : 'Forgot your password?'}</h1>
+  if (sent) return (
+    <section className="card-panel auth auth-sent">
+      <span className="sent-icon"><Mail size={30}/></span>
+      <h1>Check your email</h1>
+      <p className="muted">{mode === 'up' ? 'We sent a confirmation link to' : mode === 'link' ? 'If there’s an account for' : 'If there’s an account for'} <strong>{email}</strong>{mode === 'up' ? '. Tap it to switch on your account, then sign in.' : mode === 'link' ? ', we sent a sign-in link. Open it on this device to sign straight in.' : ', we sent a link to choose a new password.'}</p>
+      <p className="muted small">Not there after a minute? Check Spam or Promotions, and that the address is right.</p>
+      <div className="row-gap">
+        <button className="btn btn-outline" onClick={() => go('in')}><ArrowRight size={16}/>Back to sign in</button>
+        {mode === 'up' && <button className="btn btn-ghost" onClick={async () => { const {error} = await sb.auth.resend({type: 'signup', email: email.trim(), options: {emailRedirectTo: redirect}}); alert(error ? friendly(error.message) : 'Sent again.'); }}>Resend email</button>}
       </div>
-      {mode !== 'reset' && (
-        <div className="segmented two" role="tablist">
-          <button role="tab" aria-selected={mode === 'in'} className={mode === 'in' ? 'on' : ''} onClick={() => setMode('in')}>Sign in</button>
-          <button role="tab" aria-selected={mode === 'up'} className={mode === 'up' ? 'on' : ''} onClick={() => setMode('up')}>Create account</button>
-        </div>
-      )}
-      <form className="form" onSubmit={submit}>
-        {mode === 'up' && (
-          <>
-            <fieldset><legend>I want to</legend>
-              <div className="choice-row">
-                <button type="button" className={'choice' + (type === 'worker' ? ' on' : '')} onClick={() => setType('worker')}><UserRound size={20}/><strong>Find work</strong><small>Pick up paid shifts</small></button>
-                <button type="button" className={'choice' + (type === 'business' ? ' on' : '')} onClick={() => setType('business')}><Building2 size={20}/><strong>Hire workers</strong><small>Post shifts for my business</small></button>
-              </div>
-            </fieldset>
-            <label className="field">Your full name<input name="full_name" required minLength={2} maxLength={120} autoComplete="name"/></label>
-            {type === 'business' && <label className="field">Business name<input name="business_name" required minLength={2} maxLength={120} autoComplete="organization"/></label>}
-          </>
-        )}
-        <label className="field">Email<input name="email" type="email" required autoComplete="email"/></label>
-        {mode !== 'reset' && <label className="field">Password<input name="password" type="password" required minLength={mode === 'up' ? 10 : 1} autoComplete={mode === 'up' ? 'new-password' : 'current-password'}/>{mode === 'up' && <small>At least 10 characters.</small>}</label>}
-        {mode === 'up' && <label className="check"><input type="checkbox" required/><span>I’m 18 or older and agree to the <a className="link" href="rules.html" target="_blank">Community rules</a>, <a className="link" href="terms.html" target="_blank">terms</a> and <a className="link" href="privacy.html" target="_blank">privacy policy</a>.</span></label>}
-        {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
-        <button className="btn btn-primary btn-block btn-lg" disabled={busy}>{busy && <LoaderCircle className="spin" size={18}/>}{mode === 'up' ? 'Create account' : mode === 'in' ? 'Sign in' : 'Send reset link'}</button>
-        <button type="button" className="link center-link" onClick={() => setMode(mode === 'reset' ? 'in' : 'reset')}>{mode === 'reset' ? 'Back to sign in' : 'Forgot password?'}</button>
-      </form>
     </section>
   );
+
+  const title = mode === 'up' ? (type === 'business' ? 'Hire people for shifts' : 'Find shifts near you') : mode === 'in' ? 'Welcome back' : mode === 'link' ? 'Sign in without a password' : 'Reset your password';
+  return (
+    <div className="auth-shell">
+      <aside className="auth-side">
+        <Logo2/>
+        <h2>Work and hiring, close to home.</h2>
+        <ul>
+          <li><Zap size={16}/>Pick up paid shifts in one tap</li>
+          <li><ShieldCheck size={16}/>Pay held safely in escrow</li>
+          <li><Building2 size={16}/>Hire local people by the shift</li>
+          <li><Lock size={16}/>Your details stay private</li>
+        </ul>
+      </aside>
+      <section className="card-panel auth">
+        <div className="page-head">
+          <p className="overline">{mode === 'up' ? 'Create your free account' : mode === 'in' ? 'Sign in' : mode === 'link' ? 'Email link' : 'Forgot password'}</p>
+          <h1>{title}</h1>
+        </div>
+        {(mode === 'in' || mode === 'up') && (
+          <div className="segmented two" role="tablist">
+            <button role="tab" aria-selected={mode === 'in'} className={mode === 'in' ? 'on' : ''} onClick={() => go('in')}>Sign in</button>
+            <button role="tab" aria-selected={mode === 'up'} className={mode === 'up' ? 'on' : ''} onClick={() => go('up')}>Create account</button>
+          </div>
+        )}
+        {google && (mode === 'in' || mode === 'up') && <>
+          <button className="btn btn-outline btn-block btn-lg google-btn" onClick={() => sb.auth.signInWithOAuth({provider: 'google', options: {redirectTo: redirect}})}><GoogleMark/>Continue with Google</button>
+          <div className="or"><span>or with email</span></div>
+        </>}
+        <form className="form" onSubmit={submit}>
+          {mode === 'up' && (
+            <>
+              <fieldset><legend>I want to</legend>
+                <div className="choice-row">
+                  <button type="button" className={'choice' + (type === 'worker' ? ' on' : '')} onClick={() => setType('worker')}><UserRound size={20}/><strong>Find work</strong><small>Pick up paid shifts</small></button>
+                  <button type="button" className={'choice' + (type === 'business' ? ' on' : '')} onClick={() => setType('business')}><Building2 size={20}/><strong>Hire workers</strong><small>Post shifts for my business</small></button>
+                </div>
+              </fieldset>
+              <label className="field">Your full name<input name="full_name" required minLength={2} maxLength={120} autoComplete="name" placeholder="As on your ID"/></label>
+              {type === 'business' && <label className="field">Business name<input name="business_name" required minLength={2} maxLength={120} autoComplete="organization"/></label>}
+            </>
+          )}
+          <label className="field">Email<input name="email" type="email" required autoComplete="email" inputMode="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"/></label>
+          {(mode === 'in' || mode === 'up') && <PasswordField mode={mode} value={pw} onChange={setPw}/>}
+          {mode === 'in' && <button type="button" className="link forgot" onClick={() => go('reset')}>Forgot password?</button>}
+          {mode === 'up' && <label className="check"><input type="checkbox" required/><span>I’m 18 or older and agree to the <a className="link" href="rules.html" target="_blank">Community rules</a>, <a className="link" href="terms.html" target="_blank">terms</a> and <a className="link" href="privacy.html" target="_blank">privacy policy</a>.</span></label>}
+          {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
+          {resend && <button type="button" className="btn btn-ghost btn-block" onClick={async () => { const {error} = await sb.auth.resend({type: 'signup', email: email.trim(), options: {emailRedirectTo: redirect}}); setMsg(error ? {kind: 'error', text: friendly(error.message)} : {kind: 'ok', text: 'Confirmation email sent again.'}); setResend(false); }}><Mail size={16}/>Resend confirmation email</button>}
+          <button className="btn btn-primary btn-block btn-lg" disabled={busy}>{busy && <LoaderCircle className="spin" size={18}/>}{mode === 'up' ? 'Create account' : mode === 'in' ? 'Sign in' : mode === 'link' ? 'Email me a sign-in link' : 'Send reset link'}</button>
+          {mode === 'in' && <button type="button" className="btn btn-ghost btn-block" onClick={() => go('link')}><Mail size={16}/>Email me a sign-in link instead</button>}
+          {(mode === 'reset' || mode === 'link') && <button type="button" className="link center-link" onClick={() => go('in')}>Back to sign in with password</button>}
+        </form>
+        <p className="muted small center-text"><Lock size={12}/> We never ask for your password by phone, email or WhatsApp.</p>
+      </section>
+    </div>
+  );
+}
+
+function Logo2() { return <span className="auth-logo"><img src="assets/favicon.svg" alt="" width={34} height={34}/><span>community<b>work</b></span></span>; }
+function GoogleMark() {
+  return <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>;
 }
 
 function NewPassword({sb}: {sb: SupabaseClient}) {
@@ -199,22 +282,25 @@ function Dashboard({sb, profile, email, staff, reload}: {sb: SupabaseClient; pro
             <h1>{name || 'Your account'}{profile.verified && <BadgeCheck size={22} className="pv-check"/>}</h1>
             <p className="dash-sub">{email}</p>
           </div>
-          <div className="mode-switch" role="tablist" aria-label="Account mode">
+          {m.canSwitch && <div className="mode-switch" role="tablist" aria-label="Account mode">
             <button role="tab" aria-selected={mode === 'worker'} className={mode === 'worker' ? 'on' : ''} onClick={() => switchMode('worker')} disabled={switching}>
               <Sparkles size={16}/>Working
             </button>
             <button role="tab" aria-selected={mode === 'business'} className={mode === 'business' ? 'on' : ''} onClick={() => switchMode('business')} disabled={switching}>
               <Building2 size={16}/>Hiring
             </button>
-          </div>
+          </div>}
         </div>
         <div className="dash-actions">
           <a className="chip-link" href={'profile.html?id=' + profile.id + (mode === 'business' ? '&view=business' : '')}><Eye size={15}/>{mode === 'business' ? 'View business page' : 'View profile'}</a>
-          {staff && <a className="chip-link strong" href="admin.html"><ShieldCheck size={15}/>{staff === 'ceo' ? 'CEO dashboard' : 'Admin dashboard'}</a>}
+          {staff && <button className="chip-link strong" onClick={async () => { const {error} = await sb.rpc('set_staff_view', {p_on: true}); if (error) return setErr(error.message); reload(); }}><ShieldCheck size={15}/>Back to {staff === 'ceo' ? 'CEO' : 'admin'} view</button>}
           <button className="chip-link" onClick={() => sb.auth.signOut().then(reload)}><LogOut size={15}/>Sign out</button>
         </div>
       </section>
       {err && <Notice kind="error">{err}</Notice>}
+      {(profile.work_banned || profile.hire_banned) && !profile.banned && (
+        <Notice kind="error">{profile.work_banned ? 'Working (picking up shifts) has been switched off for this account by Community Work.' : 'Hiring has been switched off for this business by Community Work, and its shifts are no longer shown.'}{profile.ban_reason ? ` Reason: ${profile.ban_reason}.` : ''} This is permanent. <a className="link" href="rules.html#enforcement">Community rules</a></Notice>
+      )}
       {profile.suspended && <Suspended sb={sb} profile={profile}/>}
       {askBiz && (
         <Sheet title="Switch to Hiring" onClose={() => setAskBiz(false)}>
@@ -344,14 +430,14 @@ function AccountSettings({sb, profile, email, mode, onSwitch, go}: {sb: Supabase
   return (
     <div className="split">
       <div className="stack">
-        <section className="card-panel section-card">
+        {modes(profile).canSwitch && <section className="card-panel section-card">
           <header className="sec-head">{hiring ? <Building2 size={18}/> : <Sparkles size={18}/>}<div><h2>You’re in {hiring ? 'Hiring' : 'Working'} mode</h2><p>One mode at a time. Your dashboard, settings and payments all follow the mode you’re in.</p></div></header>
           <div className="mode-row">
             <span className="mode-ic">{hiring ? <Sparkles size={20}/> : <Building2 size={20}/>}</span>
             <div><strong>{hiring ? 'Want to pick up shifts?' : 'Need to hire people?'}</strong><small>{hiring ? 'Switch to Working to find shifts, get paid to your bank and use your worker profile.' : 'Switch to Hiring to post shifts, book workers and pay through escrow. Same login.'}</small></div>
             <button className="btn btn-primary btn-sm themed" onClick={onSwitch}><Repeat size={15}/>Switch to {hiring ? 'Working' : 'Hiring'}</button>
           </div>
-        </section>
+        </section>}
 
         {hiring ? (
           <section className="card-panel section-card">
@@ -668,7 +754,7 @@ function PostShift({sb, profile, onPosted}: {sb: SupabaseClient; profile: Profil
         <h2 className="form-step"><span>1</span>The shift</h2>
         <label className="field">Job title<input value={f.title} onChange={e => set('title', e.target.value)} required minLength={3} maxLength={100} placeholder="e.g. Waiter for Saturday lunch"/></label>
         <label className="field">Type of work<select value={f.category} onChange={e => set('category', e.target.value)} required><option value="" disabled>Choose…</option>{browseCategories.filter(c => c !== 'Other').map(c => <option key={c}>{c}</option>)}<option>Other</option></select></label>
-        <label className="field">What the worker will do<textarea rows={4} value={f.description} onChange={e => set('description', e.target.value)} required minLength={10} maxLength={4000} placeholder="Duties, dress code, what to bring, who to ask for."/></label>
+        <label className="field">What the worker will do<textarea rows={4} value={f.description} onChange={e => set('description', e.target.value)} required minLength={10} maxLength={4000} placeholder="Duties, dress code, what to bring, who to ask for."/><small>{f.description.length}/4000</small></label>
         <h2 className="form-step"><span>2</span>Where</h2>
         <button type="button" className={'location-set' + (spot ? ' done' : '')} onClick={() => setPicking(true)}><MapPin size={21}/><span><strong>{spot ? spot.label : 'Set the workplace location'}</strong><small>{spot ? 'Tap to change' : 'Search the address or use your location on site'}</small></span>{spot ? <Check size={20}/> : <Plus size={20}/>}</button>
         <label className="field">Street address (shown only to booked workers)<input value={f.address} onChange={e => set('address', e.target.value)} maxLength={200}/></label>
@@ -838,7 +924,7 @@ type OpenShift = {id: string; title: string; description: string; category: stri
 export function ShiftsPage() {
   const acct = useAccount();
   if (!acct.ready) return <div className="page"><div className="job-list">{[0, 1, 2].map(i => <div className="job-card skeleton" key={i}><span/><span/><span/></div>)}</div></div>;
-  if (acct.sb && acct.profile && modes(acct.profile).active === 'business')
+  if (acct.sb && acct.profile && !staffView(acct.staff, acct.profile) && modes(acct.profile).active === 'business')
     return <HiringShifts sb={acct.sb} profile={acct.profile}/>;
   return <ShiftBoard/>;
 }
@@ -855,7 +941,7 @@ function HiringShifts({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
         <a className="btn btn-primary themed" href="account.html?tab=post"><Plus size={18}/>Post a shift</a>
       </div>
       <BusinessShifts sb={sb} profile={profile}/>
-      <p className="muted small center-text">Looking for work yourself? Switch to <strong>Working</strong> on your <a className="link" href="account.html">account page</a>.</p>
+      {!profile.work_banned && <p className="muted small center-text">Looking for work yourself? Switch to <strong>Working</strong> on your <a className="link" href="account.html">account page</a>.</p>}
     </div>
   );
 }
@@ -892,7 +978,9 @@ function ShiftBoard() {
     setMine(x => new Set([...x, s.id])); setPicking(null); setBooked(s); load();
   }
 
+  const ceo = staffView(acct.staff, acct.profile);
   const blocked = !acct.profile ? null
+    : ceo ? <Notice><ShieldCheck size={15}/> {acct.staff === 'ceo' ? 'CEO' : 'Admin'} view: you’re seeing the shift board the way workers do. Picking up is off — <a className="link" href="account.html">switch to your own account</a> to work.</Notice>
     : acct.profile.suspended ? <Notice kind="error">Your account is paused, so you can’t pick up shifts. <a className="link" href="account.html">Send an appeal</a></Notice>
     : m?.active === 'business' ? <Notice>You’re in <strong>Hiring</strong> mode. <button className="link" onClick={async () => { await acct.sb!.from('profiles').update({active_mode: 'worker'}).eq('id', acct.profile!.id); acct.reload(); }}>Switch to Working</button> to pick up shifts.</Notice>
     : null;
@@ -931,6 +1019,7 @@ function ShiftBoard() {
                   <div className="pay"><strong>{money(s.hourly_rate_zar)} / hr</strong><small>{money(s.hourly_rate_zar * h)} for {h} h</small></div>
                   {have ? <span className="pill accepted"><Check size={13}/>You’re booked</span>
                     : own ? <span className="pill">Your shift</span>
+                    : ceo ? <a className="btn btn-outline btn-sm" href={'profile.html?view=business&id=' + s.business_id}>Business</a>
                     : <button className="btn btn-primary btn-sm themed" onClick={() => tryPick(s)}><Zap size={15}/>Pick up</button>}
                 </div>
               </article>
@@ -993,11 +1082,11 @@ export function AdminPage() {
   const two = useTwoStep(acct.sb, acct.session?.access_token);
   if (!acct.ready) return <div className="page"><div className="card-panel center"><span className="spinner"/></div></div>;
   if (!acct.sb) return <NotConfigured/>;
-  if (!acct.session) return <div className="page reading"><Notice>Sign in with your staff account.</Notice><AuthForm sb={acct.sb}/></div>;
+  if (!acct.session) return <div className="page auth-page"><Notice>Sign in with your team account to open the dashboard.</Notice><AuthForm sb={acct.sb}/></div>;
   if (!acct.staff) return <div className="page"><div className="empty"><h2>Staff only</h2><p>This area is for the Community Work team.</p><a className="btn btn-primary" href="account.html">My account</a></div></div>;
   if (two.loading) return <div className="page"><div className="card-panel center"><span className="spinner"/></div></div>;
   if (two.verify || (two.required && !two.enrolled)) return <div className="page reading"><TwoFactor sb={acct.sb} onDone={() => { two.refresh(); acct.reload(); }}/></div>;
-  return <AdminConsole sb={acct.sb} role={acct.staff} me={acct.session.user.id}/>;
+  return <AdminConsole sb={acct.sb} role={acct.staff} me={acct.session.user.id} viewOn={staffView(acct.staff, acct.profile)}/>;
 }
 
 function TwoFactor({sb, onDone, onCancel}: {sb: SupabaseClient; onDone: () => void; onCancel?: () => void}) {
@@ -1038,11 +1127,20 @@ function TwoFactor({sb, onDone, onCancel}: {sb: SupabaseClient; onDone: () => vo
 }
 
 const ADMIN_TABS: [string, string, React.ComponentType<{size?: number}>][] = [
-  ['overview', 'Overview', LayoutDashboard], ['live', 'Live', Activity], ['users', 'Users', Users], ['support', 'Support', SupportIcon], ['appeals', 'Appeals', Gavel],
-  ['payments', 'Payments', Wallet], ['team', 'Team', ShieldCheck], ['settings', 'Settings', Settings], ['audit', 'Activity log', FileText]];
+  ['overview', 'Overview', LayoutDashboard], ['live', 'Live', Activity], ['users', 'People', Users], ['support', 'Support', SupportIcon], ['appeals', 'Appeals', Gavel],
+  ['payments', 'Payments', Wallet], ['ads', 'Ads', Megaphone], ['team', 'Team', ShieldCheck], ['settings', 'Settings', Settings], ['audit', 'Activity log', FileText]];
 
-function AdminConsole({sb, role, me}: {sb: SupabaseClient; role: 'ceo' | 'admin'; me: string}) {
-  const [tab, setTab] = useState(params.get('tab') || 'overview');
+function AdminConsole({sb, role, me, viewOn}: {sb: SupabaseClient; role: 'ceo' | 'admin'; me: string; viewOn: boolean}) {
+  const [tab, setTabState] = useState(params.get('tab') || 'overview');
+  const setTab = (t: string) => { setTabState(t); const u = new URL(location.href); u.searchParams.set('tab', t); history.replaceState(null, '', u); };
+  const [leaving, setLeaving] = useState(false);
+  // The CEO view is the default for team accounts. Switching it off opens their own working/hiring account instead.
+  async function ownAccount() {
+    setLeaving(true);
+    const {error} = await sb.rpc('set_staff_view', {p_on: false});
+    if (error) { setLeaving(false); return alert(error.message.includes('set_staff_view') ? 'Run the latest database update (update 10) first.' : error.message); }
+    location.href = 'account.html';
+  }
   const tabs = ADMIN_TABS.filter(([k]) => k !== 'settings' || role === 'ceo');
   const {data: pending} = useRpc<any[]>(sb, 'admin_appeals', {p_status: 'pending'}, [tab]);
   const {data: waiting} = useRpc<any[]>(sb, 'admin_support_queue', {p_status: 'open'}, [tab], 60000);
@@ -1061,7 +1159,14 @@ function AdminConsole({sb, role, me}: {sb: SupabaseClient; role: 'ceo' | 'admin'
             <a className="chip-link" href="https://analytics.google.com/" target="_blank" rel="noreferrer"><BarChart3 size={15}/>Analytics</a>
             <a className="chip-link" href="https://www.google.com/adsense/" target="_blank" rel="noreferrer"><TrendingUp size={15}/>AdSense</a>
             <a className="chip-link" href="https://www.tradesafe.co.za/" target="_blank" rel="noreferrer"><Wallet size={15}/>TradeSafe</a>
-            <a className="chip-link" href="account.html"><UserRound size={15}/>My account</a>
+          </div>
+        </div>
+        <div className="view-switch">
+          <span className="vs-label"><ShieldCheck size={16}/><span><b>{role === 'ceo' ? 'CEO' : 'Admin'} view is {viewOn ? 'on' : 'off'}</b><small>{viewOn ? 'You see the whole site as the team, not as a worker or business.' : 'Your Account tab opens your own working/hiring account.'}</small></span></span>
+          <div className="vs-buttons">
+            {!viewOn && <button className="chip-link strong" onClick={async () => { const {error} = await sb.rpc('set_staff_view', {p_on: true}); if (error) alert(error.message); else location.reload(); }}><ShieldCheck size={15}/>Turn CEO view on</button>}
+            <button className="chip-link" onClick={ownAccount} disabled={leaving}>{leaving ? <LoaderCircle className="spin" size={15}/> : <UserRound size={15}/>}Use my own account</button>
+            <button className="chip-link" onClick={() => sb.auth.signOut().then(() => location.replace('account.html'))}><LogOut size={15}/>Sign out</button>
           </div>
         </div>
       </section>
@@ -1071,7 +1176,8 @@ function AdminConsole({sb, role, me}: {sb: SupabaseClient; role: 'ceo' | 'admin'
       <div className="dash-body" key={tab}>
         {tab === 'overview' && <Overview sb={sb} go={setTab}/>}
         {tab === 'live' && <Live sb={sb}/>}
-        {tab === 'users' && <UsersAdmin sb={sb}/>}
+        {tab === 'users' && <PeopleAdmin sb={sb}/>}
+        {tab === 'ads' && <AdsAdmin sb={sb} role={role}/>}
         {tab === 'support' && <SupportAdmin sb={sb}/>}
         {tab === 'appeals' && <AppealsAdmin sb={sb}/>}
         {tab === 'payments' && <PaymentsAdmin sb={sb}/>}
@@ -1156,7 +1262,7 @@ function Table({title, rows, cols}: {title: string; rows: any[]; cols: [string, 
       <h3>{title}</h3>
       {!rows?.length ? <p className="muted">Nothing yet.</p> : (
         <table><thead><tr>{cols.map(([, l]) => <th key={l}>{l}</th>)}</tr></thead>
-          <tbody>{rows.map((r, i) => <tr key={i}>{cols.map(([k]) => <td key={k}>{typeof r[k] === 'number' ? n(r[k]) : String(r[k] ?? '—')}</td>)}</tr>)}</tbody></table>
+          <tbody>{rows.map((r, i) => <tr key={i}>{cols.map(([k, l]) => <td key={k} data-label={l}>{typeof r[k] === 'number' ? n(r[k]) : String(r[k] ?? '—')}</td>)}</tr>)}</tbody></table>
       )}
     </section>
   );
@@ -1166,44 +1272,7 @@ function Live({sb}: {sb: SupabaseClient}) {
   const {data, err} = useRpc<any>(sb, 'admin_live', {p_minutes: 30}, [], 15000);
   if (err) return <Notice kind="error">{err}</Notice>;
   if (!data) return <div className="card-panel center"><span className="spinner"/></div>;
-  return (
-    <div className="stack">
-      <div className="tile-grid"><Tile label="Active in last 30 min" value={<><Activity size={20}/> {n(data.active_visitors)}</>} sub="visitors"/><Tile label="Events" value={n(data.events)} sub="refreshes every 15 seconds"/></div>
-      <Table title="Latest activity" rows={(data.recent || []).map((e: any) => ({...e, at: time(e.at)}))} cols={[['at', 'Time'], ['type', 'Event'], ['path', 'Page'], ['target', 'Detail']]}/>
-    </div>
-  );
-}
-
-function UsersAdmin({sb}: {sb: SupabaseClient}) {
-  const [q, setQ] = useState(''), [rows, setRows] = useState<any[] | null>(null), [err, setErr] = useState('');
-  const load = (search = q) => sb.rpc('admin_users', {p_search: search, p_limit: 100, p_offset: 0}).then(({data, error}) => error ? setErr(error.message) : setRows(data));
-  useEffect(() => { load(''); }, []);
-  const flag = async (id: string, patch: {p_verified?: boolean; p_suspended?: boolean; p_banned?: boolean}) => { const {error} = await sb.rpc('admin_set_flags', {p_user: id, ...patch}); if (error) alert(error.message); load(); };
-  return (
-    <div className="stack">
-      <form className="search-box big" onSubmit={e => { e.preventDefault(); load(); }}><Search size={18}/><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search by email, name or business"/><button className="btn btn-dark btn-sm">Search</button></form>
-      {err && <Notice kind="error">{err}</Notice>}
-      {!rows ? <div className="card-panel center"><span className="spinner"/></div> : (
-        <section className="card-panel table-wrap"><table>
-          <thead><tr><th>Account</th><th>Mode</th><th>Area</th><th>Joined</th><th>Strikes</th><th>Status</th><th></th></tr></thead>
-          <tbody>{rows.map(u => (
-            <tr key={u.id}>
-              <td><strong>{u.business_name || u.full_name || '—'}</strong><br/><small>{u.email}</small></td>
-              <td>{u.account_type}{u.payout_ready && <><br/><small>payouts set</small></>}</td>
-              <td>{[u.city, u.province].filter(Boolean).join(', ') || '—'}</td>
-              <td>{new Date(u.created_at).toLocaleDateString('en-ZA')}</td>
-              <td>{u.strikes ?? 0}{u.total_strikes ? <small className="muted"> ({u.total_strikes} all-time)</small> : null}</td>
-              <td>{u.banned ? <span className="pill declined">Banned</span> : u.suspended ? <span className="pill declined">Suspended</span> : u.verified ? <span className="pill accepted">Verified</span> : <span className="pill">Active</span>}{u.blocked_by ? <><br/><small className="muted">blocked by {u.blocked_by} business{u.blocked_by > 1 ? 'es' : ''}</small></> : null}</td>
-              <td className="row-gap">
-                <button className="btn btn-outline btn-sm" onClick={() => flag(u.id, {p_verified: !u.verified})}>{u.verified ? 'Unverify' : 'Verify'}</button>
-                {!u.banned && <button className="btn btn-outline btn-sm" onClick={() => confirm(u.suspended ? 'Restore this account?' : 'Suspend this account? They won’t be able to post or pick up shifts, but they can appeal.') && flag(u.id, {p_suspended: !u.suspended})}>{u.suspended ? 'Restore' : 'Suspend'}</button>}
-                <button className="btn btn-ghost btn-sm danger" onClick={() => confirm(u.banned ? 'Lift the ban and restore this account?' : 'Ban this account for good? They can’t work or hire on Community Work again, and can’t appeal.') && flag(u.id, {p_banned: !u.banned})}><Ban size={14}/>{u.banned ? 'Lift ban' : 'Ban'}</button>
-              </td>
-            </tr>))}</tbody>
-        </table></section>
-      )}
-    </div>
-  );
+  return <LiveFeed data={data}/>;
 }
 
 function PaymentsAdmin({sb}: {sb: SupabaseClient}) {
@@ -1229,10 +1298,10 @@ function PaymentsAdmin({sb}: {sb: SupabaseClient}) {
           <thead><tr><th>Shift</th><th>Amount</th><th>Hours</th><th>State</th><th></th></tr></thead>
           <tbody>{rows.map(p => (
             <tr key={p.id}>
-              <td><strong>{p.shift?.title}</strong><br/><small>{p.shift?.city} · {p.shift?.starts_at ? day(p.shift.starts_at) : ''}</small></td>
-              <td>{money(p.amount_zar)}<br/><small>fee {money(p.fee_zar)}</small></td>
-              <td>{p.hours}</td>
-              <td><PayState state={p.state}/>{p.provider_state && <><br/><small>{p.provider_state}</small></>}</td>
+              <td data-label="Shift"><strong>{p.shift?.title}</strong><br/><small>{p.shift?.city} · {p.shift?.starts_at ? day(p.shift.starts_at) : ''}</small></td>
+              <td data-label="Amount">{money(p.amount_zar)}<br/><small>fee {money(p.fee_zar)}</small></td>
+              <td data-label="Hours">{p.hours}</td>
+              <td data-label="State"><PayState state={p.state}/>{p.provider_state && <><br/><small>{p.provider_state}</small></>}</td>
               <td className="row-gap">
                 {['funded', 'disputed'].includes(p.state) && <button className="btn btn-dark btn-sm" disabled={busy === p.id} onClick={() => act(p.id, 'release', `Release ${money(p.amount_zar)} to the worker?`)}>Release</button>}
                 {['awaiting_payment', 'funded', 'disputed'].includes(p.state) && <button className="btn btn-outline btn-sm" disabled={busy === p.id} onClick={() => act(p.id, 'cancel', 'Cancel and refund the business?')}>Refund</button>}
@@ -1267,7 +1336,7 @@ function TeamAdmin({sb, role, me}: {sb: SupabaseClient; role: 'ceo' | 'admin'; m
       )}
       <section className="card-panel table-wrap"><h3>Team</h3>
         {!rows ? <span className="spinner"/> : <table><thead><tr><th>Email</th><th>Role</th><th>Since</th><th></th></tr></thead>
-          <tbody>{rows.map(r => <tr key={r.user_id}><td>{r.email}{r.user_id === me && ' (you)'}</td><td>{r.role === 'ceo' ? 'CEO' : 'Admin'}</td><td>{new Date(r.added_at).toLocaleDateString('en-ZA')}</td>
+          <tbody>{rows.map(r => <tr key={r.user_id}><td data-label="Email">{r.email}{r.user_id === me && ' (you)'}</td><td data-label="Role">{r.role === 'ceo' ? 'CEO' : 'Admin'}</td><td data-label="Since">{new Date(r.added_at).toLocaleDateString('en-ZA')}</td>
             <td>{role === 'ceo' && r.role !== 'ceo' && <button className="btn btn-outline btn-sm" onClick={async () => { if (confirm(`Remove ${r.email} as admin?`)) { const {error} = await sb.rpc('admin_remove', {p_user: r.user_id}); if (error) alert(error.message); load(); } }}>Remove</button>}</td></tr>)}</tbody></table>}
       </section>
     </div>

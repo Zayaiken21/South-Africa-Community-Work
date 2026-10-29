@@ -22,6 +22,7 @@ Do these steps once, in order. Nothing here needs a terminal except step 5.
 | `supabase/migrations/20261028240000_count_people_not_bookings.sql` | Worker counts count people, not bookings |
 | `supabase/migrations/20261028260000_hide_own_shifts.sql` | You never see your own business's shifts on the shift board |
 | `supabase/migrations/20261028280000_support_queue_shift_rules.sql` | Support queue (Randy hands over to a person, CEO dashboard → Support) and 4–12 hour shifts |
+| `supabase/migrations/20261028300000_ceo_mode_bans_ads.sql` | Ban a person, only their working side, or only their business; CEO view for team accounts; sponsored offers edited in CEO dashboard → Ads |
 
 Or paste `supabase/run-updates.sql`, which has all of them in order and is safe to run again. They keep all existing data. `supabase/repair-accounts.sql` fixes logins created before the database was set up.
 
@@ -101,3 +102,7 @@ npx supabase functions deploy tradesafe-callback --no-verify-jwt
 ## Support contact details
 
 Edit `support-config.json` on GitHub to set the support **phone**, **WhatsApp** number, **email** and **hours** shown on the Support page. Empty values are hidden. No rebuild needed.
+
+## Google sign-in (optional)
+
+Turn on Google in Supabase → Authentication → Sign In / Providers, then add `"google": true` to `backend-config.json`. The **Continue with Google** button appears on the sign-in page.

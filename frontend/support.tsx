@@ -77,6 +77,7 @@ function Rich({text}: {text: string}) {
 }
 
 type Msg = {from: 'randy' | 'me'; text: string; chips?: string[]; handoff?: boolean};
+const OTHER = 'Other questions';
 const GREETING = 'Hi, I’m **Randy** 👋 I can help with payments, shifts, strikes, your account, hiring and our rules. Ask me anything, or pick a topic.';
 
 export function RandyChat({onHandoff}: {onHandoff: (question: string) => void}) {
@@ -117,14 +118,19 @@ export function RandyChat({onHandoff}: {onHandoff: (question: string) => void}) 
         return;
       }
       const [top, ...more] = hits;
-      setMsgs(m => [...m, {from: 'randy', text: fill(top.entry.a, live?.settings), chips: [...more.map(h => h.entry.q[0].replace(/^./, c => c.toUpperCase()) + '?'), 'Talk to a person']}]);
+      setMsgs(m => [...m, {from: 'randy', text: fill(top.entry.a, live?.settings), chips: [...more.map(h => h.entry.q[0].replace(/^./, c => c.toUpperCase()) + '?'), OTHER, 'Talk to a person']}]);
     }, 450 + Math.min(question.length * 8, 600));
   }
+  // Back to the list of topics, from anywhere in the chat.
+  function menu() {
+    setMsgs(m => [...m, {from: 'me', text: OTHER}, {from: 'randy', text: 'Sure! What else can I help with? Pick a topic, or type your question.', chips: [...topics.map(t => t[1]), 'Talk to a person']}]);
+  }
   function chip(c: string) {
+    if (c === OTHER) return menu();
     const t = topics.find(x => x[1] === c);
     if (t) {
-      const entries = knowledge.filter(e => e.topic === t[0]).slice(0, 6);
-      setMsgs(m => [...m, {from: 'me', text: c}, {from: 'randy', text: `Here are common questions about **${c.toLowerCase()}**:`, chips: entries.map(e => e.q[0].replace(/^./, x => x.toUpperCase()) + '?')}]);
+      const entries = knowledge.filter(e => e.topic === t[0]).slice(0, 8);
+      setMsgs(m => [...m, {from: 'me', text: c}, {from: 'randy', text: `Here are common questions about **${c.toLowerCase()}**:`, chips: [...entries.map(e => e.q[0].replace(/^./, x => x.toUpperCase()) + '?'), OTHER]}]);
       return;
     }
     ask(c);
@@ -142,7 +148,7 @@ export function RandyChat({onHandoff}: {onHandoff: (question: string) => void}) 
             {m.from === 'randy' && <span className="mini-face"><Bot size={15}/></span>}
             <div className="bubble-col">
               <div className={'bubble ' + m.from}><Rich text={m.text}/></div>
-              {m.chips && i === msgs.length - 1 && <div className="chip-wrap randy-chips">{m.chips.map(c => <button key={c} onClick={() => chip(c)}>{c === 'Talk to a person' ? <><Users size={13}/>{c}</> : c}</button>)}</div>}
+              {m.chips && i === msgs.length - 1 && <div className="chip-wrap randy-chips">{m.chips.map(c => <button key={c} className={c === OTHER ? 'chip-back' : ''} onClick={() => chip(c)}>{c === 'Talk to a person' ? <><Users size={13}/>{c}</> : c === OTHER ? <><ArrowLeft size={13}/>{c}</> : c}</button>)}</div>}
             </div>
           </div>
         ))}
@@ -152,7 +158,10 @@ export function RandyChat({onHandoff}: {onHandoff: (question: string) => void}) 
         <input value={text} onChange={e => setText(e.target.value)} placeholder="Ask Randy a question…" maxLength={300} aria-label="Ask Randy"/>
         <button className="btn btn-primary" aria-label="Send" disabled={!text.trim()}><Send size={17}/></button>
       </form>
-      <button className="link center-link" onClick={() => { setMsgs(m => [...m, {from: 'me', text: 'Talk to a person'}, {from: 'randy', text: 'Sure — I’ll put you in the queue for our support team. Tell us what you need below.', handoff: true}]); onHandoff(lastQ.current); }}><Users size={15}/>Talk to a person instead</button>
+      <div className="randy-foot">
+        <button className="btn btn-ghost btn-sm" onClick={menu}><ArrowLeft size={15}/>Other questions</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => { setMsgs(m => [...m, {from: 'me', text: 'Talk to a person'}, {from: 'randy', text: 'Sure — I’ll put you in the queue for our support team. Tell us what you need below.', handoff: true}]); onHandoff(lastQ.current); }}><Users size={15}/>Talk to a person</button>
+      </div>
     </section>
   );
 }
@@ -341,12 +350,12 @@ export function SupportAdmin({sb}: {sb: SupabaseClient}) {
           <table><thead><tr><th>#</th><th>Request</th><th>From</th><th>Topic</th><th>Last message</th><th>Status</th></tr></thead>
             <tbody>{rows.map((t, i) => (
               <tr key={t.id} className="clickable" onClick={() => setOpen(t.id)}>
-                <td>{t.status === 'open' ? i + 1 : ''}</td>
-                <td><strong>{t.subject}</strong><br/><small className="muted">{t.last_message}</small></td>
-                <td>{t.name || '—'}<br/><small className="muted">{t.email}</small></td>
-                <td>{TOPIC_LABEL[t.topic] || t.topic}</td>
-                <td>{day(t.last_message_at)}<br/><small className="muted">{t.messages} message{t.messages == 1 ? '' : 's'}</small></td>
-                <td><span className={'pill ' + (t.status === 'open' ? 'applied' : t.status === 'answered' ? 'accepted' : '')}>{statusLabel(t.status)}</span></td>
+                <td data-label="In line">{t.status === 'open' ? i + 1 : '—'}</td>
+                <td data-label="Request"><strong>{t.subject}</strong><br/><small className="muted">{t.last_message}</small></td>
+                <td data-label="From">{t.name || '—'}<br/><small className="muted">{t.email}</small></td>
+                <td data-label="Topic">{TOPIC_LABEL[t.topic] || t.topic}</td>
+                <td data-label="Last message">{day(t.last_message_at)}<br/><small className="muted">{t.messages} message{t.messages == 1 ? '' : 's'}</small></td>
+                <td data-label="Status"><span className={'pill ' + (t.status === 'open' ? 'applied' : t.status === 'answered' ? 'accepted' : '')}>{statusLabel(t.status)}</span></td>
               </tr>))}</tbody></table>
         </section>
       )}
