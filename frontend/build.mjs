@@ -26,7 +26,7 @@ const pages = {
   'rules.html': ['Community rules', 'The rules for workers and businesses on Community Work: pay, hours, cancellations, strikes, payments and safety, based on South African labour law.'],
   'how-it-works.html': ['How it works', 'Learn how to find local and online work and post jobs on Community Work South Africa.'],
   'about.html': ['About Community Work', 'Local work, online work and local hiring throughout South Africa’s nine provinces.'],
-  'help.html': ['Help and safety', 'Answers about location, job listings, posting work and staying safe.'],
+  'help.html': ['Help and support', 'Ask Randy, our support assistant, read common questions and staying-safe tips, or contact the Community Work team.'],
   'privacy.html': ['Privacy information', 'How Community Work uses location, job listing information and device storage.'],
   'terms.html': ['Platform terms', 'The conditions for using Community Work South Africa.'],
   'offline.html': ['You’re offline', 'Connect to the internet to load the latest jobs.'],

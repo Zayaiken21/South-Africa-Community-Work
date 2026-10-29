@@ -183,6 +183,12 @@ export function SupportPage() {
           <RandyChat onHandoff={startHandoff}/>
           <div ref={formRef}>{handoff !== null && <NewTicket sb={acct.sb} signedIn={!!acct.session} userId={acct.session?.user.id} initial={handoff} onCancel={() => setHandoff(null)}/>}</div>
           <FaqList/>
+          <section className="card-panel" id="safety">
+            <ShieldCheck size={22}/>
+            <h2>Before you agree to work</h2>
+            <p className="muted">Confirm who is hiring, the exact workplace, duties, hours and pay. Never pay anyone to get a job, and never share bank logins, PINs or ID documents through a job ad. If something feels wrong, stop and check the employer independently — then tell us.</p>
+            <button className="btn btn-outline" onClick={() => startHandoff('')}><Users size={16}/>Report a problem to our team</button>
+          </section>
         </div>
         <aside className="stack support-side">
           <ContactCard cfg={cfg}/>

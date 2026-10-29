@@ -767,7 +767,7 @@ button.link { padding: 0; }
 .support-page { max-width: 1100px; }
 .support-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
 .support-side { position: sticky; top: 88px; }
-@media (max-width: 900px) { .support-grid { grid-template-columns: 1fr; } .support-side { position: static; order: -1; } }
+@media (max-width: 900px) { .support-grid { grid-template-columns: 1fr; } .support-side { position: static; } }
 .randy { padding: 0; gap: 0; overflow: hidden; justify-items: stretch; }
 .randy-head { display: flex; align-items: center; gap: 12px; padding: 16px 20px; background: linear-gradient(135deg, var(--green), color-mix(in srgb, var(--green) 55%, #0b3d2c)); color: #fff; }
 .randy-head small { display: flex; align-items: center; gap: 6px; opacity: .88; font-size: 12.5px; }
