@@ -3835,15 +3835,7 @@ function Table({title, rows, cols}: {title: string; rows: any[]; cols: [string, 
 
 /** CEO dashboard → Live. */
 function Live({sb}: {sb: SupabaseClient}) {
-  const {data, err} = useRpc<any>(sb, 'admin_live', {p_minutes: 30}, [], 15000);
-  if (err) return <Notice kind="error">{err}</Notice>;
-  if (!data)
-    return (
-      <div className="card-panel center">
-        <span className="spinner" />
-      </div>
-    );
-  return <LiveFeed data={data} />;
+  return <LiveFeed sb={sb} />;
 }
 
 /** CEO dashboard → Payments: release or refund escrow. */

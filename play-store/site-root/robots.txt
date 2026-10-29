@@ -1,0 +1,7 @@
+# Community Work South Africa — rules for search engines and other crawlers
+User-agent: *
+Allow: /
+Disallow: /South-Africa-Community-Work/admin.html
+Disallow: /South-Africa-Community-Work/*?ticket=
+
+Sitemap: https://zayaiken21.github.io/South-Africa-Community-Work/sitemap.xml

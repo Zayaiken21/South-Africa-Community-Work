@@ -53,8 +53,8 @@ Site settings you can change on GitHub without rebuilding: `backend-config.json`
 | Path | What it is |
 |---|---|
 | `migrations/20261028000000_marketplace.sql` | The base database (run once). |
-| `migrations/2026102812…` to `…300000_…sql` | Updates 1–10, each safe to run again. |
-| `run-updates.sql` | Updates 1–10 in one file — the easy way to bring the database up to date. |
+| `migrations/2026102812…` to `20261029000000_…sql` | Updates 1–11, each safe to run again. |
+| `run-updates.sql` | Updates 1–11 in one file — the easy way to bring the database up to date. |
 | `repair-accounts.sql` | Fixes accounts created before the database existed and makes the CEO account staff. |
 | `functions/payments`, `functions/tradesafe-callback`, `functions/_shared` | Server functions for TradeSafe escrow. |
 | `email-templates/` | Branded sign-up, password-reset and other emails to paste into Supabase. |

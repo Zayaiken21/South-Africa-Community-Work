@@ -142,4 +142,31 @@ export function startTracking() {
     {capture: true},
   );
   window.addEventListener('appinstalled', () => track('install'));
+  joinOnline();
+}
+
+// ---------------------------------------------------------------- who's online right now
+/** The live channel every open page joins, so the dashboard can see who is on the site this moment. */
+export const ONLINE_CHANNEL = 'online-now';
+/** One person on the site right now, as the dashboard sees them (no names — just where they are). */
+export type OnlinePerson = {path: string; signedIn: boolean; since: string; userId?: string};
+
+/**
+ * Joins the live "online now" channel with this visitor's random id and current page. Nothing is stored: when the page
+ * closes or goes offline, they drop off the list within seconds.
+ */
+async function joinOnline() {
+  const sb = await backend();
+  if (!sb || !visitor) return;
+  const {data} = await sb.auth.getSession();
+  const me: OnlinePerson = {
+    path: location.pathname.split('/').pop() || 'index.html',
+    signedIn: !!data.session,
+    since: new Date().toISOString(),
+    userId: data.session?.user.id,
+  };
+  const channel = sb.channel(ONLINE_CHANNEL, {config: {presence: {key: visitor}}});
+  channel.subscribe(status => {
+    if (status === 'SUBSCRIBED') channel.track(me);
+  });
 }
