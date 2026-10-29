@@ -51,6 +51,28 @@ jobs:
           ./gradlew bundleRelease --no-daemon --stacktrace 2>&1 | tee -a ../out/build-log.txt
           cp app/build/outputs/bundle/release/*.aab ../out/app-release-unsigned.aab
           cp twa-manifest.json ../out/
+          # The generated Android project (Gradle files, manifest, Java sources), without build output, for review.
+          mkdir -p ../out/project
+          tar --exclude='./app/build' --exclude='./.gradle' --exclude='./build' -cf - . | tar -xf - -C ../out/project
+
+      - name: Verify package name and version inside the bundle
+        run: |
+          set -e
+          curl -sSL -o bundletool.jar https://github.com/google/bundletool/releases/download/1.17.2/bundletool-all-1.17.2.jar
+          java -jar bundletool.jar dump manifest --bundle out/app-release-unsigned.aab > out/bundle-manifest.xml
+          PKG=$(node -p "require('./android/twa-manifest.json').packageId")
+          CODE=$(node -p "require('./android/twa-manifest.json').appVersionCode")
+          NAME=$(node -p "require('./android/twa-manifest.json').appVersionName")
+          {
+            echo "Expected: package=$PKG versionCode=$CODE versionName=$NAME"
+            grep -o 'package="[^"]*"' out/bundle-manifest.xml
+            grep -o 'android:versionCode="[^"]*"' out/bundle-manifest.xml
+            grep -o 'android:versionName="[^"]*"' out/bundle-manifest.xml
+          } | tee out/verification.txt
+          grep -q "package=\"$PKG\"" out/bundle-manifest.xml
+          grep -q "android:versionCode=\"$CODE\"" out/bundle-manifest.xml
+          grep -q "android:versionName=\"$NAME\"" out/bundle-manifest.xml
+          echo "VERIFIED" | tee -a out/verification.txt
 
       - name: Publish the bundle and log to the android-build branch
         if: always()

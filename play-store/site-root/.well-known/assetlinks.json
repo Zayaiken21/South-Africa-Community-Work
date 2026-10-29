@@ -1,9 +1,11 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
-      "package_name": "io.github.zayaiken21.communitywork",
+      "package_name": "communityworksouthafrica.app",
       "sha256_cert_fingerprints": [
         "9E:9B:C1:35:8C:2C:AC:61:36:8E:A4:1C:93:84:78:28:6D:62:31:47:CE:FC:65:39:C0:88:40:F1:E6:C6:27:02"
       ]
