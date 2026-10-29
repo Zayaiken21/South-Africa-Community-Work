@@ -466,8 +466,12 @@ const day = (v: string) =>
     hour: '2-digit',
     minute: '2-digit',
   });
-/** Request status in plain words. */
-const statusLabel = (s: string) => (s === 'open' ? 'Waiting for us' : s === 'answered' ? 'We replied' : 'Closed');
+/** Chat status in plain words. */
+const statusLabel = (s: string) =>
+  s === 'open' ? 'Waiting for an agent' : s === 'answered' ? 'Live chat' : s === 'idle' ? 'Paused' : 'Closed';
+/** Colour of each status label. */
+const statusPill = (s: string) =>
+  'pill ' + (s === 'open' ? 'applied' : s === 'answered' ? 'accepted' : s === 'idle' ? 'paused' : '');
 
 /** support.html / help.html. */
 export function SupportPage() {
@@ -498,6 +502,7 @@ export function SupportPage() {
       </div>
       <div className="support-grid">
         <div className="stack">
+          {acct.session && acct.sb && <ActiveChat sb={acct.sb} />}
           <RandyChat onHandoff={startHandoff} />
           <div ref={formRef}>
             {handoff !== null && (
@@ -740,9 +745,7 @@ function MyRequests({sb}: {sb: SupabaseClient}) {
               {TOPIC_LABEL[t.topic] || t.topic} · {day(t.last_message_at)}
             </small>
           </div>
-          <span className={'pill ' + (t.status === 'open' ? 'applied' : t.status === 'answered' ? 'accepted' : '')}>
-            {statusLabel(t.status)}
-          </span>
+          <span className={statusPill(t.status)}>{statusLabel(t.status)}</span>
         </a>
       ))}
     </section>
@@ -780,17 +783,61 @@ function FaqList() {
   );
 }
 
-// ---------------------------------------------------------------- one request, for the person and for staff
+// ---------------------------------------------------------------- one chat, for the person and for staff
+/** The person's newest chat that isn't closed, shown at the top of the Support page so it carries on after sign-in. */
+function ActiveChat({sb}: {sb: SupabaseClient}) {
+  const [id, setId] = useState<string | null>(null);
+  useEffect(() => {
+    sb.rpc('support_ping', {p_ticket: null}).then(() =>
+      sb
+        .from('support_tickets')
+        .select('id')
+        .neq('status', 'closed')
+        .order('last_message_at', {ascending: false})
+        .limit(1)
+        .then(({data}) => setId(data?.[0]?.id ?? null)),
+    );
+  }, []);
+  return id ? <TicketThread id={id} sb={sb} staff={false} embedded /> : null;
+}
+
+/** Live presence in one chat: the person and the agent each say they're here, and see whether the other is. */
+function useChatPresence(sb: SupabaseClient | null, ticketId: string, role: 'agent' | 'user') {
+  const [here, setHere] = useState<{agent: boolean; user: boolean}>({agent: false, user: false});
+  useEffect(() => {
+    if (!sb) return;
+    const ch = sb.channel('support-chat-' + ticketId, {
+      config: {presence: {key: role + '-' + Math.random().toString(36).slice(2, 8)}},
+    });
+    ch.on('presence', {event: 'sync'}, () => {
+      const roles = Object.values(ch.presenceState<{role: string}>())
+        .flat()
+        .map(p => p.role);
+      setHere({agent: roles.includes('agent'), user: roles.includes('user')});
+    });
+    ch.subscribe(status => {
+      if (status === 'SUBSCRIBED') ch.track({role});
+    });
+    return () => {
+      sb.removeChannel(ch);
+    };
+  }, [sb, ticketId, role]);
+  return here;
+}
+
+/** One support chat, for the person (`staff` false) or for the team. Updates every few seconds while open. */
 export function TicketThread({
   id,
   sb,
   staff,
   onBack,
+  embedded = false,
 }: {
   id: string;
   sb: SupabaseClient | null;
   staff: boolean;
   onBack?: () => void;
+  embedded?: boolean;
 }) {
   const acct = useAccount();
   const [t, setT] = useState<any>(null),
@@ -799,20 +846,43 @@ export function TicketThread({
   const [text, setText] = useState(''),
     [busy, setBusy] = useState(false),
     [err, setErr] = useState('');
+  const here = useChatPresence(sb, id, staff ? 'agent' : 'user');
+  const listRef = useRef<HTMLDivElement>(null);
   const load = async () => {
     if (!sb) return;
     const {data} = await sb.from('support_tickets').select('*').eq('id', id).maybeSingle();
     setT(data ?? false);
     const {data: m} = await sb.from('support_messages').select('*').eq('ticket_id', id).order('created_at');
     setMsgs(m || []);
-    const {data: p} = await sb.rpc('support_queue_position', {p_ticket: id});
-    setPos(p as any);
+    if (data?.status === 'open') {
+      const {data: p} = await sb.rpc('support_queue_position', {p_ticket: id});
+      setPos(p as any);
+    }
   };
   useEffect(() => {
     load();
-    const iv = setInterval(load, 20000);
+    const iv = setInterval(load, 4000);
     return () => clearInterval(iv);
   }, [id, sb]);
+  // While the person has the chat open and in view, tell the server they're still here (keeps a live chat from pausing).
+  useEffect(() => {
+    if (staff || !sb) return;
+    const ping = () => {
+      if (document.visibilityState === 'visible') sb.rpc('support_ping', {p_ticket: id});
+    };
+    ping();
+    const iv = setInterval(ping, 60000);
+    document.addEventListener('visibilitychange', ping);
+    return () => {
+      clearInterval(iv);
+      document.removeEventListener('visibilitychange', ping);
+    };
+  }, [id, sb, staff]);
+  // Keep the newest message in view inside the conversation box.
+  useEffect(() => {
+    const box = listRef.current;
+    if (box) box.scrollTop = box.scrollHeight;
+  }, [msgs.length]);
   if (!sb) return null;
   if (t === null)
     return (
@@ -821,15 +891,17 @@ export function TicketThread({
       </div>
     );
   if (t === false)
-    return (
+    return embedded ? null : (
       <div className="empty">
-        <h2>Request not found</h2>
+        <h2>Chat not found</h2>
+        <p>Closed chats are deleted 24 hours after they close.</p>
         <a className="btn btn-primary" href="support.html">
           Back to support
         </a>
       </div>
     );
   const me = acct.session?.user.id;
+  const connected = t.status === 'answered' && !!t.agent_id;
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim() || !me) return;
@@ -847,9 +919,43 @@ export function TicketThread({
     await sb!.from('support_tickets').update({status}).eq('id', id);
     load();
   }
+
+  // What the person sees about the chat right now.
+  const banner = staff ? (
+    <p className="chat-state">
+      <span className={'dot ' + (here.user ? 'on' : '')} />
+      {here.user ? 'The customer is in the chat now' : 'The customer isn’t in the chat right now'}
+      {connected && <> · {t.agent_id === me ? 'you’re connected' : `${t.agent_name || 'An agent'} is connected`}</>}
+      {t.status === 'open' && ' · waiting for an agent — your reply connects you'}
+      {t.status === 'idle' && ' · paused (customer away for 5 minutes)'}
+    </p>
+  ) : t.status === 'open' ? (
+    <p className="chat-state">
+      <Clock size={14} /> Waiting for an agent — you’re <strong>number {pos ?? '…'}</strong> in the queue. You can close
+      this page or sign out; your place and messages are kept.
+    </p>
+  ) : connected ? (
+    <p className="chat-state">
+      <span className={'dot ' + (here.agent ? 'on' : '')} />
+      <span>
+        <strong>{t.agent_name || 'An agent'}</strong>{' '}
+        {here.agent ? 'is online' : 'is offline — they’ll see your message when they’re back'}
+      </span>
+    </p>
+  ) : t.status === 'idle' ? (
+    <p className="chat-state">
+      <Clock size={14} /> Chat paused because you were away for 5 minutes. Send a message to reconnect — the next
+      available agent will see this conversation.
+    </p>
+  ) : (
+    <p className="chat-state">This chat is closed and will be deleted 24 hours after closing.</p>
+  );
+
   return (
-    <section className="card-panel ticket">
-      {onBack ? (
+    <section className={'card-panel ticket' + (embedded ? ' embedded' : '')}>
+      {embedded ? (
+        <p className="overline">Your conversation with support</p>
+      ) : onBack ? (
         <button className="back" onClick={onBack}>
           <ArrowLeft size={17} />
           Back to the queue
@@ -862,32 +968,25 @@ export function TicketThread({
       )}
       <div className="booking-top">
         <div>
-          <p className="overline">{TOPIC_LABEL[t.topic] || t.topic}</p>
+          {!embedded && <p className="overline">{TOPIC_LABEL[t.topic] || t.topic}</p>}
           <h2>{t.subject}</h2>
           <p className="muted small">Opened {day(t.created_at)}</p>
         </div>
-        <span className={'pill ' + (t.status === 'open' ? 'applied' : t.status === 'answered' ? 'accepted' : '')}>
-          {statusLabel(t.status)}
-        </span>
+        <span className={statusPill(t.status)}>{statusLabel(t.status)}</span>
       </div>
-      {!staff && t.status === 'open' && (
-        <p className="hint-box">
-          <Clock size={14} /> You’re <strong>number {pos ?? '…'}</strong> in the queue. We’ll reply here — check back or
-          keep this page open.
-        </p>
-      )}
-      <div className="thread">
+      {banner}
+      <div className="thread" ref={listRef}>
         {msgs.map(m => (
-          <div key={m.id} className={'bubble-row ' + (m.from_staff ? 'randy' : 'me')}>
-            {m.from_staff && (
-              <span className="mini-face staff">
-                <LifeBuoy size={15} />
+          <div key={m.id} className={'bubble-row ' + (m.from_staff === staff ? 'me' : 'randy')}>
+            {m.from_staff !== staff && (
+              <span className={'mini-face' + (m.from_staff ? ' staff' : '')}>
+                {m.from_staff ? <LifeBuoy size={15} /> : <Users size={15} />}
               </span>
             )}
             <div className="bubble-col">
-              <div className={'bubble ' + (m.from_staff ? 'randy' : 'me')}>{m.body}</div>
+              <div className={'bubble ' + (m.from_staff === staff ? 'me' : 'randy')}>{m.body}</div>
               <small className="bubble-time">
-                {m.from_staff ? 'Community Work support · ' : ''}
+                {m.from_staff ? 'Support · ' : staff ? 'Customer · ' : ''}
                 {day(m.created_at)}
               </small>
             </div>
@@ -901,7 +1000,9 @@ export function TicketThread({
             onChange={e => setText(e.target.value)}
             rows={2}
             maxLength={4000}
-            placeholder={staff ? 'Reply to the customer…' : 'Add a message…'}
+            placeholder={
+              staff ? 'Reply to the customer…' : t.status === 'idle' ? 'Type to reconnect…' : 'Type a message…'
+            }
             aria-label="Message"
           />
           <button className="btn btn-primary" disabled={busy || !text.trim()} aria-label="Send">
@@ -910,9 +1011,9 @@ export function TicketThread({
         </form>
       ) : (
         <p className="muted">
-          This request is closed. Need more help?{' '}
+          Need more help?{' '}
           <a className="link" href="support.html">
-            Start a new one
+            Start a new chat
           </a>
           .
         </p>
@@ -922,7 +1023,7 @@ export function TicketThread({
         {t.status !== 'closed' ? (
           <button className="btn btn-outline btn-sm" onClick={() => setStatus('closed')}>
             <Check size={15} />
-            {staff ? 'Close request' : 'My problem is solved'}
+            {staff ? 'Close chat' : 'My problem is solved'}
           </button>
         ) : (
           <button className="btn btn-ghost btn-sm" onClick={() => setStatus('open')}>
@@ -947,7 +1048,7 @@ export function SupportAdmin({sb}: {sb: SupabaseClient}) {
   useEffect(() => {
     setRows(null);
     load();
-    const iv = setInterval(load, 30000);
+    const iv = setInterval(load, 10000);
     return () => clearInterval(iv);
   }, [status]);
   if (open)
@@ -967,7 +1068,8 @@ export function SupportAdmin({sb}: {sb: SupabaseClient}) {
       <div className="chip-wrap">
         {[
           ['open', 'Waiting'],
-          ['answered', 'Replied'],
+          ['answered', 'Live'],
+          ['idle', 'Paused'],
           ['closed', 'Closed'],
           ['all', 'All'],
         ].map(([k, l]) => (
@@ -986,7 +1088,7 @@ export function SupportAdmin({sb}: {sb: SupabaseClient}) {
             <Inbox size={26} />
           </div>
           <h3>Nothing here</h3>
-          <p>New requests from the support page appear here, oldest first.</p>
+          <p>New chats from the support page appear here, oldest first. Closed chats are deleted after 24 hours.</p>
         </div>
       ) : (
         <section className="card-panel table-wrap">
@@ -996,7 +1098,7 @@ export function SupportAdmin({sb}: {sb: SupabaseClient}) {
                 <th>#</th>
                 <th>Request</th>
                 <th>From</th>
-                <th>Topic</th>
+                <th>Agent</th>
                 <th>Last message</th>
                 <th>Status</th>
               </tr>
@@ -1015,7 +1117,15 @@ export function SupportAdmin({sb}: {sb: SupabaseClient}) {
                     <br />
                     <small className="muted">{t.email}</small>
                   </td>
-                  <td data-label="Topic">{TOPIC_LABEL[t.topic] || t.topic}</td>
+                  <td data-label="Agent">
+                    {t.agent_name || '—'}
+                    {t.waiting_on_agent && t.status !== 'closed' && (
+                      <>
+                        <br />
+                        <small className="needs-reply">Needs a reply</small>
+                      </>
+                    )}
+                  </td>
                   <td data-label="Last message">
                     {day(t.last_message_at)}
                     <br />
@@ -1024,13 +1134,7 @@ export function SupportAdmin({sb}: {sb: SupabaseClient}) {
                     </small>
                   </td>
                   <td data-label="Status">
-                    <span
-                      className={
-                        'pill ' + (t.status === 'open' ? 'applied' : t.status === 'answered' ? 'accepted' : '')
-                      }
-                    >
-                      {statusLabel(t.status)}
-                    </span>
+                    <span className={statusPill(t.status)}>{statusLabel(t.status)}</span>
                   </td>
                 </tr>
               ))}

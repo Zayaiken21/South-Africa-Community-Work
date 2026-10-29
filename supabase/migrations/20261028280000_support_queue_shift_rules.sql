@@ -112,6 +112,7 @@ revoke execute on function public.support_queue_position(uuid) from public, anon
 grant execute on function public.support_queue_position(uuid) to authenticated;
 
 -- Staff queue: waiting tickets first, oldest first.
+drop function if exists public.admin_support_queue(text);
 create or replace function public.admin_support_queue(p_status text default 'open')
 returns table (id uuid, user_id uuid, email text, name text, topic text, subject text, status text, created_at timestamptz,
                last_message_at timestamptz, messages bigint, last_message text)

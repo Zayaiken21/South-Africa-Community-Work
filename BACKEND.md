@@ -24,6 +24,7 @@ Do these steps once, in order. Nothing here needs a terminal except step 5.
 | `supabase/migrations/20261028280000_support_queue_shift_rules.sql` | Support queue (Randy hands over to a person, CEO dashboard → Support) and 4–12 hour shifts |
 | `supabase/migrations/20261028300000_ceo_mode_bans_ads.sql` | Ban or pause a person, only their working side, or only their business; CEO view for team accounts; affiliate ads (text or uploaded banners) managed in CEO dashboard → Affiliate ads |
 | `supabase/migrations/20261029000000_live_activity_people.sql` | Live tab shows who did what (names for signed-in people) over up to 24 hours, and who is online now |
+| `supabase/migrations/20261029010000_support_live_chat.sql` | Support works like a live chat: agent name and online status, 5-minute pause when the person is away, reconnect to the next agent with full history, chats deleted 24 hours after closing |
 
 Or paste `supabase/run-updates.sql`, which has all of them in order and is safe to run again. They keep all existing data. `supabase/repair-accounts.sql` fixes logins created before the database was set up.
 

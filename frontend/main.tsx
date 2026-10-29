@@ -191,9 +191,11 @@ function App() {
           <a className={tab === 'jobs' || tab === 'home' ? 'on' : ''} href="find-work.html">
             Find work
           </a>
-          <a className={tab === 'online' ? 'on' : ''} href="find-work.html?mode=remote">
-            Online jobs
-          </a>
+          {!ceoView && (
+            <a className={tab === 'online' ? 'on' : ''} href="find-work.html?mode=remote">
+              Online jobs
+            </a>
+          )}
           {ceoView ? (
             <a className={tab === 'account' ? 'on' : ''} href="account.html">
               {teamLabel} dashboard
@@ -335,15 +337,12 @@ function App() {
       {adPages.includes(file) && <HangingOffer />}
 
       {ceoView ? (
-        <nav className="tabbar three" aria-label="App">
+        <nav className="tabbar two" aria-label="App">
           <a className={tab === 'home' || tab === 'jobs' ? 'on' : ''} href="index.html">
             <House size={22} />
             <span>Jobs</span>
           </a>
-          <a className={tab === 'online' ? 'on' : ''} href="find-work.html?mode=remote">
-            <Globe size={22} />
-            <span>Online</span>
-          </a>
+
           <a className={tab === 'account' ? 'on' : ''} href="account.html">
             <ShieldCheck size={22} />
             <span>{teamLabel}</span>
@@ -933,6 +932,12 @@ function Privacy() {
         <p>
           What you type into the CV builder stays in this browser on your device. Your PDF or Word file is created on
           your device too; nothing is uploaded.
+        </p>
+        <h2>Support chats</h2>
+        <p>
+          Messages you send to our support team are kept while your chat is open, so you can carry on after closing the
+          page or signing out. A chat is deleted completely 24 hours after it’s closed. Chats that are paused for 24
+          hours close automatically.
         </p>
         <h2>Affiliate ads</h2>
         <p>

@@ -1166,4 +1166,89 @@ await denied("visitors can't look up names", async () => {
   return r.rows.length ? r : {rows: [], affectedRows: 0};
 });
 
+// live support chat
+let lc;
+await ok('a support request waits in the queue', async () => {
+  lc = (
+    await as(
+      'w2',
+      'aal1',
+      `insert into support_tickets (user_id, topic, subject) values ('${ids.w2}', 'payments', 'Live chat test') returning id`,
+    )
+  ).rows[0].id;
+  await as(
+    'w2',
+    'aal1',
+    `insert into support_messages (ticket_id, author, body) values ('${lc}', '${ids.w2}', 'Hello, I need help')`,
+  );
+  return (await db.query(`select status from support_tickets where id=$1`, [lc])).rows[0].status;
+});
+await ok('an agent replying connects them to the chat', async () => {
+  await db.query(`update profiles set full_name = 'Ayanda Mokoena' where id = $1`, [ids.admin]);
+  await as(
+    'admin',
+    'aal1',
+    `insert into support_messages (ticket_id, author, from_staff, body) values ('${lc}', '${ids.admin}', true, 'Hi, I am here')`,
+  );
+  const t = (await db.query(`select status, agent_id, agent_name from support_tickets where id=$1`, [lc])).rows[0];
+  if (t.status !== 'answered' || t.agent_id !== ids.admin || t.agent_name !== 'Ayanda')
+    throw new Error(JSON.stringify(t));
+  return `${t.status}, agent ${t.agent_name}`;
+});
+await denied("a person can't set the agent themselves", () =>
+  as('w2', 'aal1', `update support_tickets set agent_name = 'Fake' where id = '${lc}'`),
+);
+await ok('5 minutes without activity pauses the chat and releases the agent', async () => {
+  await db.exec(`select set_config('request.jwt.claims', '', false)`);
+  await db.query(
+    `update support_tickets set user_last_at = now() - interval '6 minutes', connected_at = now() - interval '6 minutes' where id = $1`,
+    [lc],
+  );
+  await as('w2', 'aal1', `select support_ping(null)`);
+  const t = (await db.query(`select status, agent_id from support_tickets where id=$1`, [lc])).rows[0];
+  if (t.status !== 'idle' || t.agent_id) throw new Error(JSON.stringify(t));
+  return t.status;
+});
+await ok('texting again puts them back in the queue for a new agent, with the history', async () => {
+  await as(
+    'w2',
+    'aal1',
+    `insert into support_messages (ticket_id, author, body) values ('${lc}', '${ids.w2}', 'Back again')`,
+  );
+  const t = (await db.query(`select status, agent_id from support_tickets where id=$1`, [lc])).rows[0];
+  const q = (
+    await as('admin', 'aal1', `select messages, waiting_on_agent from admin_support_queue('open') where id = '${lc}'`)
+  ).rows[0];
+  if (t.status !== 'open' || t.agent_id || Number(q.messages) !== 3 || !q.waiting_on_agent)
+    throw new Error(JSON.stringify({t, q}));
+  return `${t.status}, ${q.messages} messages visible to the next agent`;
+});
+await ok('an active person keeps the live chat', async () => {
+  await as(
+    'admin',
+    'aal1',
+    `insert into support_messages (ticket_id, author, from_staff, body) values ('${lc}', '${ids.admin}', true, 'Reconnected')`,
+  );
+  await db.exec(`select set_config('request.jwt.claims', '', false)`);
+  await db.query(
+    `update support_tickets set connected_at = now() - interval '6 minutes', user_last_at = now() - interval '6 minutes' where id = $1`,
+    [lc],
+  );
+  await as('w2', 'aal1', `select support_ping('${lc}')`);
+  await as('w2', 'aal1', `select support_ping(null)`);
+  const st = (await db.query(`select status from support_tickets where id=$1`, [lc])).rows[0].status;
+  if (st !== 'answered') throw new Error(st);
+  return st;
+});
+await ok('closed chats are deleted 24 hours later, with their messages', async () => {
+  await as('w2', 'aal1', `update support_tickets set status = 'closed' where id = '${lc}'`);
+  await db.exec(`select set_config('request.jwt.claims', '', false)`);
+  await db.query(`update support_tickets set closed_at = now() - interval '25 hours' where id = $1`, [lc]);
+  await as('admin', 'aal1', `select count(*) from admin_support_queue('all')`);
+  const t = (await db.query(`select count(*)::int n from support_tickets where id=$1`, [lc])).rows[0].n;
+  const m = (await db.query(`select count(*)::int n from support_messages where ticket_id=$1`, [lc])).rows[0].n;
+  if (t || m) throw new Error(`${t} ${m}`);
+  return 'deleted';
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -448,9 +448,15 @@ export const knowledge: Entry[] = [
   {
     id: 'queue',
     topic: 'support',
-    q: ['where is my support request', 'how long until someone answers', 'my ticket'],
+    q: [
+      'where is my support request',
+      'how long until someone answers',
+      'my ticket',
+      'my chat closed',
+      'agent offline',
+    ],
     k: 'queue waiting reply request',
-    a: 'Your requests are under **My support requests** on this page, with your place in the queue. We answer in the order requests arrive. If you’re in danger, call 10111 or 112 first.',
+    a: 'Your chat stays at the top of this page — even if you close it or sign out — with your place in the queue. When an agent connects you’ll see their name and whether they’re online. If you’re away for 5 minutes the chat pauses; just send a message to reconnect, and the next agent sees everything you wrote. Closed chats are deleted 24 hours later. If you’re in danger, call 10111 or 112 first.',
   },
   {
     id: 'install',
