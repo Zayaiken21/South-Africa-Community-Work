@@ -301,7 +301,7 @@ function Dashboard({sb, profile, email, staff, reload}: {sb: SupabaseClient; pro
       {(profile.work_banned || profile.hire_banned) && !profile.banned && (
         <Notice kind="error">{profile.work_banned ? 'Working (picking up shifts) has been switched off for this account by Community Work.' : 'Hiring has been switched off for this business by Community Work, and its shifts are no longer shown.'}{profile.ban_reason ? ` Reason: ${profile.ban_reason}.` : ''} This is permanent. <a className="link" href="rules.html#enforcement">Community rules</a></Notice>
       )}
-      {profile.suspended && <Suspended sb={sb} profile={profile}/>}
+      {(profile.suspended || profile.work_paused || profile.hire_paused) && <Suspended sb={sb} profile={profile}/>}
       {askBiz && (
         <Sheet title="Switch to Hiring" onClose={() => setAskBiz(false)}>
           <form className="form" onSubmit={e => { e.preventDefault(); if (bizName.trim().length >= 2) switchMode('business', bizName); }}>
@@ -551,7 +551,9 @@ function Suspended({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
   return (
     <section className="card-panel suspended">
       {profile.banned ? <header className="sec-head"><Ban size={20}/><div><h2>This account has been closed</h2><p>Community Work has closed this account, so it can’t pick up or post shifts. If you think this is a mistake, contact us through the Help page.</p></div></header> : <>
-      <header className="sec-head"><Ban size={20}/><div><h2>Your account is paused</h2><p>{profile.suspended_reason || 'Suspended by Community Work'}. You can’t pick up or post shifts until it’s restored.</p></div></header>
+      {profile.suspended
+        ? <header className="sec-head"><Ban size={20}/><div><h2>Your account is paused</h2><p>{profile.suspended_reason || 'Suspended by Community Work'}. You can’t pick up or post shifts until it’s restored.</p></div></header>
+        : <header className="sec-head"><Ban size={20}/><div><h2>{profile.work_paused && profile.hire_paused ? 'Working and hiring are paused' : profile.work_paused ? 'Working is paused' : 'Hiring is paused'}</h2><p>{profile.pause_reason ? profile.pause_reason + '. ' : ''}{profile.work_paused && profile.hire_paused ? 'You can’t pick up or post shifts' : profile.work_paused ? 'You can’t pick up shifts' : 'Your business can’t post shifts and its open shifts are hidden'} until Community Work restores it. You can appeal below.</p></div></header>}
       {appeal === undefined ? <span className="spinner"/> : pending ? (
         <Notice>Your appeal was sent on {new Date(appeal!.created_at).toLocaleDateString('en-ZA')}. Our team will review it soon.</Notice>
       ) : (
@@ -630,6 +632,28 @@ type Booking = {id: string; status: string; hours_worked: number | null; busines
   shift: {id: string; title: string; city: string; province: string; address: string | null; starts_at: string; ends_at: string; hourly_rate_zar: number; payment_method: string; business_id: string; status: string};
   payment?: {id: string; state: string; amount_zar: number} | null};
 
+// Live countdown of the free-cancel window after picking up a shift. Ticks every second; disappears when the time is up.
+function useNow(active: boolean) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { if (!active) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [active]);
+  return now;
+}
+const mmss = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+function CancelTimer({pickedUpAt, graceMinutes, compact = false}: {pickedUpAt: string | number; graceMinutes: number; compact?: boolean}) {
+  const end = (typeof pickedUpAt === 'number' ? pickedUpAt : Date.parse(pickedUpAt)) + graceMinutes * 60000;
+  const now = useNow(end > Date.now());
+  if (!graceMinutes || Number.isNaN(end)) return null;
+  const left = end - now;
+  if (left <= 0) return compact ? null : <p className="cancel-timer over"><Clock size={15}/>The free cancel window has ended — cancelling now counts as a strike.</p>;
+  const pct = Math.min(100, (left / (graceMinutes * 60000)) * 100);
+  return (
+    <div className={'cancel-timer' + (left < 60000 ? ' soon' : '')} role="timer" aria-live="off">
+      <Clock size={15}/><span><b>{mmss(left)}</b> left to cancel for free</span>
+      <i style={{width: pct + '%'}}/>
+    </div>
+  );
+}
+
 function WorkerBookings({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
   const [rows, setRows] = useState<Booking[] | null>(null), [err, setErr] = useState('');
   const [settings, setSettings] = useState({strike_limit: 3, cancel_grace_minutes: 10});
@@ -641,6 +665,7 @@ function WorkerBookings({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
     setRows((data as any[]).map(r => ({...r, payment: pays?.find(p => p.application_id === r.id) ?? null})));
   };
   useEffect(() => { load(); sb.rpc('public_settings').then(({data}) => data && setSettings(s => ({...s, ...(data as any)}))); }, []);
+  useNow(!!cancelling); // keeps the strike warning in the cancel sheet up to date as the free window runs out
   if (err) return <Notice kind="error">{err}</Notice>;
   if (!rows) return <div className="card-panel center"><span className="spinner"/></div>;
   const now = Date.now();
@@ -667,6 +692,7 @@ function WorkerBookings({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
         <a className="link small" href={'profile.html?view=business&id=' + b.shift.business_id}>Business profile <ArrowUpRight size={13}/></a></p>
       <p className="meta-line"><Banknote size={15}/>{money(b.shift.hourly_rate_zar)}/hr · {money(b.shift.hourly_rate_zar * hoursBetween(b.shift.starts_at, b.shift.ends_at))} for the shift · {b.shift.payment_method === 'cash' ? 'Paid in cash' : 'Escrow-protected'}</p>
       {b.payment && <p className="meta-line"><Wallet size={15}/>Pay: <PayState state={b.payment.state}/></p>}
+      {b.status === 'accepted' && Date.parse(b.shift.starts_at) > now && <CancelTimer pickedUpAt={(b as any).created_at} graceMinutes={settings.cancel_grace_minutes} compact/>}
       <div className="row-gap start">
         {b.status === 'accepted' && Date.parse(b.shift.starts_at) > now &&
           <button className="btn btn-outline btn-sm" onClick={() => setCancelling(b)}>Cancel shift</button>}
@@ -688,6 +714,7 @@ function WorkerBookings({sb, profile}: {sb: SupabaseClient; profile: Profile}) {
         <Sheet title="Cancel this shift?" onClose={() => setCancelling(null)}>
           <div className="form">
             <p><strong>{cancelling.shift.title}</strong> · {day(cancelling.shift.starts_at)} {time(cancelling.shift.starts_at)}</p>
+            <CancelTimer pickedUpAt={(cancelling as any).created_at} graceMinutes={settings.cancel_grace_minutes}/>
             {free(cancelling)
               ? <Notice kind="ok">You picked this up less than {settings.cancel_grace_minutes} minutes ago, so cancelling won’t count as a strike.</Notice>
               : <Notice kind="error">This will be strike {strikes + 1} of {settings.strike_limit}.{strikes + 1 >= settings.strike_limit ? ' Your account will be paused until an appeal is approved.' : ''} The business is counting on you; only cancel if you really can’t make it.</Notice>}
@@ -784,7 +811,8 @@ function PostShift({sb, profile, onPosted}: {sb: SupabaseClient; profile: Profil
         </fieldset>
         <label className="check"><input type="checkbox" required/><span>I’ll pay at least the minimum wage, give breaks, keep the workplace safe and follow the <a className="link" href="rules.html#business" target="_blank">Community rules</a>.</span></label>
         {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
-        <button className="btn btn-primary btn-block btn-lg" disabled={busy || profile.suspended}>{busy ? <LoaderCircle className="spin" size={18}/> : <Plus size={18}/>}Post shift</button>
+        {profile.hire_paused && <Notice kind="error">Hiring is paused on your account, so you can’t post shifts right now. See your Overview to appeal.</Notice>}
+        <button className="btn btn-primary btn-block btn-lg" disabled={busy || profile.suspended || !!profile.hire_paused}>{busy ? <LoaderCircle className="spin" size={18}/> : <Plus size={18}/>}Post shift</button>
       </section>
       <aside className="tips sticky">
         <Wallet size={22}/>
@@ -961,6 +989,8 @@ function ShiftBoard() {
     if (acct.session) acct.sb.from('applications').select('shift_id').eq('worker_id', acct.session.user.id).eq('status', 'accepted').then(({data}) => setMine(new Set((data || []).map(d => d.shift_id))));
   };
   useEffect(load, [acct.ready, acct.session?.user.id, area?.lat, area?.lon, radius]);
+  const [grace, setGrace] = useState(10), [bookedAt, setBookedAt] = useState(0);
+  useEffect(() => { acct.sb?.rpc('public_settings').then(({data}) => data && setGrace((data as any).cancel_grace_minutes ?? 10)); }, [acct.sb]);
 
   if (acct.ready && !acct.sb) return <NotConfigured/>;
   const m = acct.profile ? modes(acct.profile) : null;
@@ -975,13 +1005,13 @@ function ShiftBoard() {
     setBusy(false);
     if (error) return setPickErr(error.message.includes('row-level security') ? 'You can’t pick up this shift right now.' : error.message);
     track('shift_apply', s.id);
-    setMine(x => new Set([...x, s.id])); setPicking(null); setBooked(s); load();
+    setMine(x => new Set([...x, s.id])); setPicking(null); setBookedAt(Date.now()); setBooked(s); load();
   }
 
   const ceo = staffView(acct.staff, acct.profile);
   const blocked = !acct.profile ? null
     : ceo ? <Notice><ShieldCheck size={15}/> {acct.staff === 'ceo' ? 'CEO' : 'Admin'} view: you’re seeing the shift board the way workers do. Picking up is off — <a className="link" href="account.html">switch to your own account</a> to work.</Notice>
-    : acct.profile.suspended ? <Notice kind="error">Your account is paused, so you can’t pick up shifts. <a className="link" href="account.html">Send an appeal</a></Notice>
+    : acct.profile.suspended || acct.profile.work_paused ? <Notice kind="error">{acct.profile.suspended ? 'Your account is paused' : 'Working is paused on your account'}, so you can’t pick up shifts. <a className="link" href="account.html">Send an appeal</a></Notice>
     : m?.active === 'business' ? <Notice>You’re in <strong>Hiring</strong> mode. <button className="link" onClick={async () => { await acct.sb!.from('profiles').update({active_mode: 'worker'}).eq('id', acct.profile!.id); acct.reload(); }}>Switch to Working</button> to pick up shifts.</Notice>
     : null;
 
@@ -1038,7 +1068,8 @@ function ShiftBoard() {
             <ul className="pick-rules">
               <li><Check size={15}/>You’re booked straight away — no waiting to be chosen.</li>
               <li><Check size={15}/>You’ll see the exact address and the business’s phone number.</li>
-              <li><AlertTriangle size={15}/>Cancelling or not showing up is a strike. 3 strikes pauses your account.</li>
+              <li><Clock size={15}/>Changed your mind? You can cancel free for {grace} minutes after picking it up — a timer shows how long is left.</li>
+              <li><AlertTriangle size={15}/>After that, cancelling or not showing up is a strike. 3 strikes pauses your account.</li>
               {picking.payment_method === 'escrow' && !acct.profile?.payout_ready && <li><Wallet size={15}/>Add your bank details under Get paid so you can be paid.</li>}
             </ul>
             <label className="field">Note to the business (optional)<textarea name="message" rows={2} maxLength={500} placeholder="e.g. I’ll arrive 15 minutes early."/></label>
@@ -1053,6 +1084,7 @@ function ShiftBoard() {
             <span className="success-icon"><Check size={30}/></span>
             <h2>{booked.title}</h2>
             <p>{day(booked.starts_at)} · {time(booked.starts_at)}–{time(booked.ends_at)} with {booked.business_name}. The address is in My shifts.</p>
+            <CancelTimer pickedUpAt={bookedAt} graceMinutes={grace}/>
             <a className="btn btn-primary" href="account.html?tab=bookings">See my shifts</a>
             <button className="btn btn-outline" onClick={() => setBooked(null)}>Keep browsing</button>
           </div>

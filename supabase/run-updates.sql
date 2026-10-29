@@ -1126,7 +1126,7 @@ $$;
 revoke execute on function public.admin_support_queue(text) from public, anon;
 grant execute on function public.admin_support_queue(text) to authenticated;
 
--- Update 10: separate bans for working and for a business (or the whole account), CEO view for team accounts,
+-- Update 10: separate bans and pauses for working and for a business (or the whole account), CEO view for team accounts,
 -- and sponsored offers on the job pages that the CEO edits from the dashboard.
 -- Safe to run again. Run after the earlier updates.
 
@@ -1135,7 +1135,10 @@ alter table public.profiles
   add column if not exists work_banned boolean not null default false,
   add column if not exists hire_banned boolean not null default false,
   add column if not exists ban_reason text check (char_length(ban_reason) <= 300),
-  add column if not exists staff_view boolean not null default true;
+  add column if not exists staff_view boolean not null default true,
+  add column if not exists work_paused boolean not null default false,
+  add column if not exists hire_paused boolean not null default false,
+  add column if not exists pause_reason text check (char_length(pause_reason) <= 300);
 
 create or replace function public.profiles_guard() returns trigger language plpgsql security definer set search_path = public as $$
 begin
@@ -1163,7 +1166,8 @@ begin
      or new.suspended_at is distinct from old.suspended_at or new.created_at is distinct from old.created_at
      or new.banned is distinct from old.banned or new.work_banned is distinct from old.work_banned
      or new.hire_banned is distinct from old.hire_banned or new.ban_reason is distinct from old.ban_reason
-     or new.staff_view is distinct from old.staff_view then
+     or new.staff_view is distinct from old.staff_view or new.work_paused is distinct from old.work_paused
+     or new.hire_paused is distinct from old.hire_paused or new.pause_reason is distinct from old.pause_reason then
     raise exception 'These account details can only be changed by Community Work.';
   end if;
   if new.avatar_url is distinct from old.avatar_url and new.avatar_url is not null
@@ -1183,7 +1187,7 @@ end $$;
 -- A banned side can not be used, even if someone calls the database directly.
 create or replace function public.is_active(p_type account_type) returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from profiles where id = auth.uid() and not suspended and not banned and active_mode = p_type
-                 and not (p_type = 'worker' and work_banned) and not (p_type = 'business' and hire_banned));
+                 and not (p_type = 'worker' and (work_banned or work_paused)) and not (p_type = 'business' and (hire_banned or hire_paused)));
 $$;
 
 -- ---------------------------------------------------------------- bans by Community Work
@@ -1239,6 +1243,75 @@ end $$;
 revoke execute on function public.set_staff_view(boolean) from public, anon;
 grant execute on function public.set_staff_view(boolean) to authenticated;
 
+-- ---------------------------------------------------------------- pauses by Community Work
+-- Like bans, but temporary and appealable. p_scope: account (everything), work (no picking up shifts), business (no hiring).
+create or replace function public.admin_pause(p_user uuid, p_scope text, p_on boolean, p_reason text default null)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_staff() then raise exception 'Staff only.'; end if;
+  if p_scope not in ('account', 'work', 'business') then raise exception 'Unknown pause type.'; end if;
+  if p_on and (p_user = auth.uid() or exists (select 1 from staff where user_id = p_user)) then
+    raise exception 'Team accounts can not be paused. Remove them from the team first.';
+  end if;
+  if p_scope = 'account' then
+    perform public.admin_set_flags(p_user, null, p_on, null);
+    if p_on then
+      update profiles set suspended_reason = coalesce(left(nullif(trim(p_reason), ''), 200), suspended_reason) where id = p_user;
+    else
+      update profiles set work_paused = false, hire_paused = false, pause_reason = null where id = p_user;
+    end if;
+  elsif p_scope = 'work' then
+    update profiles set work_paused = p_on where id = p_user;
+  else
+    update profiles set hire_paused = p_on where id = p_user;
+  end if;
+  if p_scope <> 'account' then
+    update profiles set pause_reason = case when p_on then coalesce(left(nullif(trim(p_reason), ''), 300), pause_reason)
+                                            when not (work_paused or hire_paused) then null else pause_reason end
+     where id = p_user;
+  end if;
+  perform audit('user.pause', p_user::text, jsonb_build_object('scope', p_scope, 'on', p_on, 'reason', p_reason));
+end $$;
+revoke execute on function public.admin_pause(uuid, text, boolean, text) from public, anon;
+grant execute on function public.admin_pause(uuid, text, boolean, text) to authenticated;
+
+-- Anyone paused (whole account or one side) can appeal; banned accounts can not.
+create or replace function public.can_appeal() returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from profiles where id = auth.uid() and (suspended or work_paused or hire_paused) and not banned)
+     and not exists (select 1 from appeals where user_id = auth.uid() and status = 'pending');
+$$;
+
+create or replace function public.admin_appeals(p_status text default 'pending')
+returns table (id uuid, user_id uuid, email text, full_name text, reason text, status text, response text,
+               suspended_reason text, total_strikes bigint, created_at timestamptz, reviewed_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select a.id, a.user_id, u.email::text, coalesce(p.business_name, p.full_name), a.reason, a.status, a.response,
+         coalesce(p.suspended_reason, case when p.work_paused and p.hire_paused then 'Working and hiring paused'
+                                           when p.work_paused then 'Working paused' when p.hire_paused then 'Hiring paused' end
+                                      || coalesce(': ' || p.pause_reason, '')),
+         (select count(*) from strikes s where s.worker_id = a.user_id), a.created_at, a.reviewed_at
+  from appeals a join profiles p on p.id = a.user_id join auth.users u on u.id = a.user_id
+  where public.is_staff() and (p_status = 'all' or a.status = p_status)
+  order by a.created_at desc limit 200;
+$$;
+
+create or replace function public.admin_review_appeal(p_appeal uuid, p_approve boolean, p_response text default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare uid uuid;
+begin
+  if not public.is_staff() then raise exception 'Staff only.'; end if;
+  update appeals set status = case when p_approve then 'approved' else 'denied' end, response = left(p_response, 1000),
+         reviewed_by = auth.uid(), reviewed_at = now()
+   where id = p_appeal and status = 'pending' returning user_id into uid;
+  if uid is null then raise exception 'This appeal has already been decided.'; end if;
+  if p_approve then
+    update profiles set suspended = false, suspended_at = null, suspended_reason = null, strikes = 0,
+                        work_paused = false, hire_paused = false, pause_reason = null
+     where id = uid and not banned;
+  end if;
+  perform audit(case when p_approve then 'appeal.approved' else 'appeal.denied' end, uid::text, jsonb_build_object('appeal', p_appeal));
+end $$;
+
 -- A banned business's shifts disappear from the board straight away.
 drop function if exists public.open_shifts(double precision, double precision, int, int);
 create or replace function public.open_shifts(p_lat double precision default null, p_lon double precision default null,
@@ -1257,7 +1330,7 @@ language sql stable security definer set search_path = public as $$
            case when p_lat is null or p_lon is null then null
                 else 6371 * 2 * asin(sqrt(power(sin(radians(s.lat - p_lat) / 2), 2) + cos(radians(p_lat)) * cos(radians(s.lat)) * power(sin(radians(s.lon - p_lon) / 2), 2))) end as distance_km
     from shifts s join profiles p on p.id = s.business_id
-    where s.status = 'open' and s.starts_at > now() and not p.suspended and not p.banned and not p.hire_banned
+    where s.status = 'open' and s.starts_at > now() and not p.suspended and not p.banned and not p.hire_banned and not p.hire_paused
       and (auth.uid() is null or (
             not exists (select 1 from business_blocks b where b.business_id = s.business_id and b.worker_id = auth.uid())
         and not exists (select 1 from applications r where r.shift_id = s.id and r.worker_id = auth.uid() and r.status = 'declined')
@@ -1277,7 +1350,7 @@ returns table (id uuid, email text, account_type account_type, full_name text, b
                strikes int, total_strikes bigint, suspended_reason text, banned boolean, blocked_by bigint,
                can_work boolean, can_hire boolean, active_mode account_type, work_banned boolean, hire_banned boolean, ban_reason text,
                avatar_url text, business_avatar_url text, phone text, headline text, business_type text, staff_role text,
-               shifts_done bigint, shifts_posted bigint)
+               shifts_done bigint, shifts_posted bigint, work_paused boolean, hire_paused boolean, pause_reason text)
 language sql stable security definer set search_path = public as $$
   select p.id, u.email::text, p.account_type, p.full_name, p.business_name, p.city, p.province, p.verified, p.suspended, p.payout_ready,
          u.created_at, u.last_sign_in_at, p.strikes, (select count(*) from strikes s where s.worker_id = p.id), p.suspended_reason, p.banned,
@@ -1285,7 +1358,8 @@ language sql stable security definer set search_path = public as $$
          p.can_work, p.can_hire, p.active_mode, p.work_banned, p.hire_banned, p.ban_reason,
          p.avatar_url, p.business_avatar_url, p.phone, p.headline, p.business_type, (select st.role::text from staff st where st.user_id = p.id),
          (select count(*) from applications a where a.worker_id = p.id and a.status = 'completed'),
-         (select count(*) from shifts s where s.business_id = p.id)
+         (select count(*) from shifts s where s.business_id = p.id),
+         p.work_paused, p.hire_paused, p.pause_reason
   from profiles p join auth.users u on u.id = p.id
   where public.is_staff()
     and (coalesce(p_search, '') = '' or u.email ilike '%' || p_search || '%' or p.full_name ilike '%' || p_search || '%'
