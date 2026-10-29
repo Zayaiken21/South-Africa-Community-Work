@@ -20,6 +20,34 @@
     "productivity",
     "lifestyle"
   ],
+  "screenshots": [
+    {
+      "src": "assets/screenshots/phone-jobs.webp",
+      "sizes": "780x1688",
+      "type": "image/webp",
+      "form_factor": "narrow",
+      "label": "Find jobs and shifts near you"
+    },
+    {
+      "src": "assets/screenshots/phone-support.webp",
+      "sizes": "780x1688",
+      "type": "image/webp",
+      "form_factor": "narrow",
+      "label": "Instant help from Randy"
+    },
+    {
+      "src": "assets/screenshots/phone-rules.webp",
+      "sizes": "780x1688",
+      "type": "image/webp",
+      "form_factor": "narrow",
+      "label": "Fair rules for workers and businesses"
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "handle_links": "preferred",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "assets/icons/icon-192.png",

@@ -15,7 +15,8 @@ by the shift, and everyone can browse in-person and online jobs. It installs on 
 | Community posts API (`app/`, `db/`, `drizzle/`, `lib/jobs.ts`) | Hosted separately (Sites) | The older posting API; the site still reads community posts from it. |
 
 Setup steps for the database, sign-in emails, payments and the CEO account: **[BACKEND.md](BACKEND.md)**.
-Affiliate ads: **[ADS.md](ADS.md)**. Publishing to Google Play: **[PLAY_STORE.md](PLAY_STORE.md)**.
+Affiliate ads: **[ADS.md](ADS.md)**. Search engines, sitemap and app stores: **[SEO.md](SEO.md)**.
+Publishing to Google Play: **[PLAY_STORE.md](PLAY_STORE.md)**.
 
 ## Code map
 
@@ -23,7 +24,7 @@ Affiliate ads: **[ADS.md](ADS.md)**. Publishing to Google Play: **[PLAY_STORE.md
 
 | File | What it is |
 |---|---|
-| `build.mjs` | Builds the site: bundles the app, writes one HTML page per route, the service worker (`sw.js`), the app manifest and the sitemap. Run with `pnpm build:pages`. |
+| `build.mjs` | Builds the site: bundles the app, writes one HTML page per route with search-engine tags and structured data, the service worker (`sw.js`), the app manifest, `sitemap.xml`, `robots.txt` and `llms.txt`. Run with `pnpm build:pages`. |
 | `main.tsx` | The app shell: header, menu, bottom tab bar, footer, and the simple pages (home, job details, saved jobs, how it works, about, privacy, terms, offline, 404). Picks the page to show from the file name. |
 | `JobsView.tsx` | The job board (Home and Find work): location, filters, in-person/online, the job list with affiliate ads between jobs and in the sidebar. Also the shared bottom `Sheet`. |
 | `marketplace.tsx` | Accounts and shifts: sign-in, the Working/Hiring dashboard, posting and managing shifts, picking up shifts, payouts, appeals, two-step sign-in, and the CEO dashboard (overview, payments, team, settings, activity log). |
@@ -40,7 +41,8 @@ Affiliate ads: **[ADS.md](ADS.md)**. Publishing to Google Play: **[PLAY_STORE.md
 | `themes.ts` | The colour themes people can pick for their profile. |
 | `app.css` | All styles. |
 
-Root `*.html`, `assets/community-app.js|css`, `sw.js`, `manifest.webmanifest` and `sitemap.xml` are **generated** by
+Root `*.html`, `assets/community-app.js|css`, `sw.js`, `manifest.webmanifest`, `sitemap.xml`, `robots.txt` and `llms.txt`
+are **generated** by
 `build.mjs` — edit `frontend/` and rebuild instead. `cv-builder.html` is the standalone CV builder.
 
 Site settings you can change on GitHub without rebuilding: `backend-config.json` (Supabase address and public key),
