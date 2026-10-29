@@ -9,6 +9,8 @@ import {useAccount, callFunction, errorText, modes, type Profile} from './backen
 import {Avatar, ProfileEditor} from './profile';
 import {themeStyle} from './themes';
 import {track} from './analytics';
+import {SupportAdmin} from './support';
+import {LifeBuoy as SupportIcon} from 'lucide-react';
 import {LocationPicker, Sheet, useAreaLocation} from './JobsView';
 import {browseCategories, money, milesLabel, milesToKm, type Location} from './catalog';
 
@@ -126,7 +128,7 @@ function AuthForm({sb}: {sb: SupabaseClient}) {
         )}
         <label className="field">Email<input name="email" type="email" required autoComplete="email"/></label>
         {mode !== 'reset' && <label className="field">Password<input name="password" type="password" required minLength={mode === 'up' ? 10 : 1} autoComplete={mode === 'up' ? 'new-password' : 'current-password'}/>{mode === 'up' && <small>At least 10 characters.</small>}</label>}
-        {mode === 'up' && <label className="check"><input type="checkbox" required/><span>I agree to the <a className="link" href="terms.html">terms</a> and <a className="link" href="privacy.html">privacy policy</a>.</span></label>}
+        {mode === 'up' && <label className="check"><input type="checkbox" required/><span>I’m 18 or older and agree to the <a className="link" href="rules.html" target="_blank">Community rules</a>, <a className="link" href="terms.html" target="_blank">terms</a> and <a className="link" href="privacy.html" target="_blank">privacy policy</a>.</span></label>}
         {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
         <button className="btn btn-primary btn-block btn-lg" disabled={busy}>{busy && <LoaderCircle className="spin" size={18}/>}{mode === 'up' ? 'Create account' : mode === 'in' ? 'Sign in' : 'Send reset link'}</button>
         <button type="button" className="link center-link" onClick={() => setMode(mode === 'reset' ? 'in' : 'reset')}>{mode === 'reset' ? 'Back to sign in' : 'Forgot password?'}</button>
@@ -642,7 +644,8 @@ function PostShift({sb, profile, onPosted}: {sb: SupabaseClient; profile: Profil
     e.preventDefault(); setMsg(null);
     if (!spot) return setMsg({kind: 'error', text: 'Set the workplace location.'});
     if (Number(f.rate) < settings.min_hourly_zar) return setMsg({kind: 'error', text: `Pay must be at least ${money(settings.min_hourly_zar)} an hour (national minimum wage).`});
-    if (hours > 16) return setMsg({kind: 'error', text: 'A shift can be up to 16 hours.'});
+    if (hours < 4) return setMsg({kind: 'error', text: 'A shift must be at least 4 hours. South African law pays anyone who works under 4 hours in a day for 4 hours anyway.'});
+    if (hours > 12) return setMsg({kind: 'error', text: 'A shift can be at most 12 hours, including overtime (Basic Conditions of Employment Act).'});
     setBusy(true);
     const rows = Array.from({length: Math.min(Number(f.days) || 1, 14)}, (_, i) => {
       const startLocal = new Date(`${f.date}T${f.start}:00+02:00`); startLocal.setUTCDate(startLocal.getUTCDate() + i);
@@ -686,12 +689,14 @@ function PostShift({sb, profile, onPosted}: {sb: SupabaseClient; profile: Profil
           <label className="field">Pay per hour (R)<input type="number" inputMode="decimal" min={settings.min_hourly_zar} max={5000} step="0.01" value={f.rate} onChange={e => set('rate', e.target.value)} required placeholder={`At least ${settings.min_hourly_zar}`}/></label>
           <label className="field">Workers needed<input type="number" min={1} max={50} value={f.workers} onChange={e => set('workers', e.target.value)} required/></label>
         </div>
+        <p className={'hint-box' + (hours < 4 || hours > 12 ? ' warn' : '')}><Clock size={14}/> {hours.toFixed(hours % 1 ? 2 : 0)} hours. Shifts are 4–12 hours. Over 5 hours, give a 1-hour meal break{hours > 9 ? '; over 9 hours, the extra time is overtime at 1.5× pay' : ''}. Sundays pay double, public holidays double. <a className="link" href="rules.html#business">Hiring rules</a></p>
         <fieldset><legend>How you’ll pay</legend>
           <div className="choice-row">
             <button type="button" className={'choice' + (f.payment === 'escrow' ? ' on' : '')} onClick={() => set('payment', 'escrow')}><ShieldCheck size={20}/><strong>Escrow (recommended)</strong><small>Pay in when you book; released after the shift</small></button>
             <button type="button" className={'choice' + (f.payment === 'cash' ? ' on' : '')} onClick={() => set('payment', 'cash')}><Banknote size={20}/><strong>Cash</strong><small>You pay the worker in person</small></button>
           </div>
         </fieldset>
+        <label className="check"><input type="checkbox" required/><span>I’ll pay at least the minimum wage, give breaks, keep the workplace safe and follow the <a className="link" href="rules.html#business" target="_blank">Community rules</a>.</span></label>
         {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
         <button className="btn btn-primary btn-block btn-lg" disabled={busy || profile.suspended}>{busy ? <LoaderCircle className="spin" size={18}/> : <Plus size={18}/>}Post shift</button>
       </section>
@@ -1033,13 +1038,14 @@ function TwoFactor({sb, onDone, onCancel}: {sb: SupabaseClient; onDone: () => vo
 }
 
 const ADMIN_TABS: [string, string, React.ComponentType<{size?: number}>][] = [
-  ['overview', 'Overview', LayoutDashboard], ['live', 'Live', Activity], ['users', 'Users', Users], ['appeals', 'Appeals', Gavel],
+  ['overview', 'Overview', LayoutDashboard], ['live', 'Live', Activity], ['users', 'Users', Users], ['support', 'Support', SupportIcon], ['appeals', 'Appeals', Gavel],
   ['payments', 'Payments', Wallet], ['team', 'Team', ShieldCheck], ['settings', 'Settings', Settings], ['audit', 'Activity log', FileText]];
 
 function AdminConsole({sb, role, me}: {sb: SupabaseClient; role: 'ceo' | 'admin'; me: string}) {
   const [tab, setTab] = useState(params.get('tab') || 'overview');
   const tabs = ADMIN_TABS.filter(([k]) => k !== 'settings' || role === 'ceo');
   const {data: pending} = useRpc<any[]>(sb, 'admin_appeals', {p_status: 'pending'}, [tab]);
+  const {data: waiting} = useRpc<any[]>(sb, 'admin_support_queue', {p_status: 'open'}, [tab], 60000);
   return (
     <div className="page wide dash admin-dash">
       <section className="dash-hero admin">
@@ -1060,12 +1066,13 @@ function AdminConsole({sb, role, me}: {sb: SupabaseClient; role: 'ceo' | 'admin'
         </div>
       </section>
       <nav className="dash-tabs" role="tablist">
-        {tabs.map(([k, l, Icon]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}><Icon size={17}/><span>{l}</span>{k === 'appeals' && !!pending?.length && <em className="badge">{pending.length}</em>}</button>)}
+        {tabs.map(([k, l, Icon]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}><Icon size={17}/><span>{l}</span>{k === 'appeals' && !!pending?.length && <em className="badge">{pending.length}</em>}{k === 'support' && !!waiting?.length && <em className="badge">{waiting.length}</em>}</button>)}
       </nav>
       <div className="dash-body" key={tab}>
         {tab === 'overview' && <Overview sb={sb} go={setTab}/>}
         {tab === 'live' && <Live sb={sb}/>}
         {tab === 'users' && <UsersAdmin sb={sb}/>}
+        {tab === 'support' && <SupportAdmin sb={sb}/>}
         {tab === 'appeals' && <AppealsAdmin sb={sb}/>}
         {tab === 'payments' && <PaymentsAdmin sb={sb}/>}
         {tab === 'team' && <TeamAdmin sb={sb} role={role} me={me}/>}

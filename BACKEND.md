@@ -21,8 +21,9 @@ Do these steps once, in order. Nothing here needs a terminal except step 5.
 | `supabase/migrations/20261028220000_hide_released_shifts.sql` | Released workers no longer see that shift; blocked workers see none of that business’s shifts |
 | `supabase/migrations/20261028240000_count_people_not_bookings.sql` | Worker counts count people, not bookings |
 | `supabase/migrations/20261028260000_hide_own_shifts.sql` | You never see your own business's shifts on the shift board |
+| `supabase/migrations/20261028280000_support_queue_shift_rules.sql` | Support queue (Randy hands over to a person, CEO dashboard → Support) and 4–12 hour shifts |
 
-They keep all existing data. `supabase/repair-accounts.sql` fixes logins created before the database was set up.
+Or paste `supabase/run-updates.sql`, which has all of them in order and is safe to run again. They keep all existing data. `supabase/repair-accounts.sql` fixes logins created before the database was set up.
 
 ## 2. Sign-in settings
 
@@ -96,3 +97,7 @@ npx supabase functions deploy tradesafe-callback --no-verify-jwt
 - Only the business that booked, or staff with a phone code, can release; every action is in the **Activity log**.
 - The callback from TradeSafe is checked by secret and IP address, then re-checked against TradeSafe's API.
 - Hourly pay is enforced at the national minimum wage (R30.23/hour from 1 March 2026; update it in **Settings** each March).
+
+## Support contact details
+
+Edit `support-config.json` on GitHub to set the support **phone**, **WhatsApp** number, **email** and **hours** shown on the Support page. Empty values are hidden. No rebuild needed.

@@ -22,6 +22,8 @@ const pages = {
   'profile.html': ['Profile', 'A Community Work member profile: skills, experience and shifts completed.'],
   'job.html': ['Job details', 'View a local opportunity, check pay and hours, and contact the poster.'],
   'saved-jobs.html': ['Saved jobs', 'Revisit jobs you saved on this device.'],
+  'support.html': ['Support', 'Get help from Randy, our support assistant, or reach the Community Work team by chat, phone or email.'],
+  'rules.html': ['Community rules', 'The rules for workers and businesses on Community Work: pay, hours, cancellations, strikes, payments and safety, based on South African labour law.'],
   'how-it-works.html': ['How it works', 'Learn how to find local and online work and post jobs on Community Work South Africa.'],
   'about.html': ['About Community Work', 'Local work, online work and local hiring throughout South Africa’s nine provinces.'],
   'help.html': ['Help and safety', 'Answers about location, job listings, posting work and staying safe.'],
@@ -73,7 +75,7 @@ self.addEventListener('fetch',e=>{
     return;
   }
   if(r.mode==='navigate'){e.respondWith(fetch(r,{cache:'no-cache'}).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(async()=>(await caches.match(r,{ignoreSearch:true}))||caches.match('./offline.html')));return;}
-  if(u.pathname.endsWith('/data/jobs-feed.json')||u.pathname.endsWith('/ads-config.json')||u.pathname.endsWith('/affiliates.json')||u.pathname.endsWith('/backend-config.json')||u.pathname.endsWith('/analytics-config.json')){e.respondWith(fetch(r,{cache:'no-cache'}).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(()=>caches.match(r,{ignoreSearch:true})));return;}
+  if(u.pathname.endsWith('/data/jobs-feed.json')||u.pathname.endsWith('/ads-config.json')||u.pathname.endsWith('/affiliates.json')||u.pathname.endsWith('/backend-config.json')||u.pathname.endsWith('/analytics-config.json')||u.pathname.endsWith('/support-config.json')){e.respondWith(fetch(r,{cache:'no-cache'}).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(()=>caches.match(r,{ignoreSearch:true})));return;}
   e.respondWith(caches.match(r).then(hit=>hit||fetch(r).then(res=>{if(res.ok){const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));}return res;})));
 });
 `);
