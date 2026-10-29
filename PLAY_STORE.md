@@ -7,7 +7,7 @@ bar. When the website changes, the app changes too — you only upload a new bun
 
 | Item | Where |
 |---|---|
-| Signed app bundle (`.aab`) to upload | Sent to you separately — `community-work-1.0.0.aab` |
+| Signed app bundle (`.aab`) to upload | Sent to you separately — `community-work-south-africa-1.0.0.aab` |
 | Upload key (keep it safe!) | Sent to you separately — `upload-key.jks` + password |
 | App settings (package id, colours, icons, shortcuts) | `android/twa-manifest.json` |
 | Bundle build | `.github/workflows/android-bundle.yml` → `android-build` branch (unsigned) |
@@ -45,7 +45,7 @@ https://play.google.com/console → sign up as an **individual** (one-time US$25
 2. Fill in **App content** using `play-store/listing.md` (privacy policy, ads = yes, app access with a test login,
    target audience 18+, data safety, content rating).
 3. **Store listing**: paste the text, upload the icon, feature graphic and at least 2 phone screenshots.
-4. **Testing → Closed testing → Create track** → upload `community-work-1.0.0.aab` → add testers (an email list).
+4. **Testing → Closed testing → Create track** → upload `community-work-south-africa-1.0.0.aab` → add testers (an email list).
    Accept **Play App Signing** when asked (Google keeps the final signing key; you keep the upload key).
 
 ## 5. Add Google's signing fingerprint (after the first upload)
@@ -61,13 +61,39 @@ New personal accounts need **at least 12 testers opted in to the closed test for
 apply for production. Invite 15+ people so a few dropping out doesn't reset the clock. After 14 days:
 **Dashboard → Apply for production**, answer the questions, then publish to Production.
 
-## Updating the app later
+## How the Android app is built
 
-- Website changes: nothing to do — the app shows the live site.
-- Name, icon, colours or shortcuts: edit `android/twa-manifest.json`, raise `appVersionCode` (2, 3, …) and
-  `appVersionName`, push to `main`. The workflow builds a new unsigned bundle on the `android-build` branch; sign it with
-  your upload key and upload it as a new release:
+The app is a Trusted Web Activity generated with Bubblewrap — there is no hand-written Android code to maintain.
 
-  ```sh
-  jarsigner -keystore upload-key.jks -sigalg SHA256withRSA -digestalg SHA-256 app-release-unsigned.aab upload
-  ```
+| What | Where |
+|---|---|
+| App settings: package name, version, name, colours, icons, start page, shortcuts | `android/twa-manifest.json` (the source of truth) |
+| Gradle project, `AndroidManifest.xml`, Java sources | Generated from that file on every build; a copy of the generated project is published to the `android-build` branch (`project/`) for review |
+| Build | `.github/workflows/android-bundle.yml` — runs on every push to `main` that changes `android/twa-manifest.json`, or from Actions → *Android app bundle* → *Run workflow* |
+| Checks | The build reads the package name, versionCode and versionName back out of the bundle with Google's bundletool and fails if they don't match (`verification.txt` on the `android-build` branch) |
+| Signing | The bundle is built **unsigned**. You sign it with your upload key (`upload-key.jks`), which is never stored on GitHub |
+
+Package name (applicationId and namespace): **`communityworksouthafrica.app`**. It can never change once the app is
+published — a different package name is a different app on Google Play.
+
+## Releasing an update (version numbers)
+
+Every upload to Google Play needs a **higher versionCode** than any before it. `android/bump-version.mjs` handles this:
+
+1. After uploading a version to Play, record it:
+   `node android/bump-version.mjs --released` (adds it to `android/version-history.json`, then commit and push).
+2. To prepare the next one: `node android/bump-version.mjs 1.0.1` — sets versionName 1.0.1 and raises versionCode by
+   one (it never goes back to a code already recorded). Push to `main`.
+3. Wait for the *Android app bundle* workflow (about 3 minutes), then download `app-release-unsigned.aab` from the
+   `android-build` branch and sign it:
+
+   ```sh
+   jarsigner -keystore upload-key.jks -sigalg SHA256withRSA -digestalg SHA-256 app-release-unsigned.aab upload
+   ```
+
+   (It asks for the password from `upload-key-details.txt`.) Or send it to Claude to sign.
+4. Upload it in Play Console as a new release on the same track, with release notes.
+
+`node android/bump-version.mjs --show` prints the current version and the highest code already released.
+
+Website changes (design, features, jobs) need no app update at all — the app always shows the live site.
