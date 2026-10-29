@@ -16,7 +16,7 @@ bar. When the website changes, the app changes too — you only upload a new bun
 | Icon and feature graphic | `play-store/play-icon-512.png`, `play-store/feature-graphic-1024x500.png` |
 | Screenshots | `assets/screenshots/` (or take your own from the installed app) |
 
-Package id: **`io.github.zayaiken21.communitywork`** — permanent once published.
+Package id: **`communityworksouthafrica.app`** — permanent once published.
 
 ## 1. Back up the upload key (do this first)
 
