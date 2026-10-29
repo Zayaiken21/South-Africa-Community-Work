@@ -3,11 +3,13 @@ import {createRoot} from 'react-dom/client';
 import {
   MapPin, Clock, Navigation, ArrowRight, ArrowLeft, Plus, Check, Bookmark, Search, ShieldCheck, Mail, Globe,
   BriefcaseBusiness, House, Menu, Download, Info, CircleHelp, Lock, FileText, ArrowUpRight, X, Users, Laptop, FileUser,
-  CalendarDays, UserRound, Building2, Wallet,
+  CalendarDays, UserRound, Building2, Wallet, LifeBuoy, BookOpen,
 } from 'lucide-react';
 import JobsView, {LocationPicker, Sheet, useAreaLocation} from './JobsView';
 import {AccountPage, AdminPage, ConsentBanner, ShiftsPage} from './marketplace';
 import {Avatar, ProfilePage} from './profile';
+import {SupportPage} from './support';
+import {RulesPage} from './rules';
 import {modes} from './backend';
 import {useAccount} from './backend';
 import {consent, gaConfigured, startTracking} from './analytics';
@@ -57,7 +59,7 @@ function App() {
   const banner = useConsentBanner();
   const signedIn = !!acct.session;
   const tab = file === 'index.html' ? 'home' : file === 'find-work.html' ? (mode === 'remote' ? 'online' : 'jobs') : file === 'shifts.html' ? 'shifts'
-    : file === 'saved-jobs.html' ? 'saved' : file === 'account.html' || file === 'admin.html' || file === 'post-job.html' || file === 'profile.html' ? 'account' : 'more';
+    : file === 'saved-jobs.html' ? 'saved' : file === 'support.html' ? 'support' : file === 'account.html' || file === 'admin.html' || file === 'post-job.html' || file === 'profile.html' ? 'account' : 'more';
   return (
     <>
       <header className="topbar">
@@ -71,6 +73,7 @@ function App() {
           <a className={tab === 'saved' ? 'on' : ''} href="saved-jobs.html">Saved</a>
           <a href="cv-builder.html">CV builder</a>
           <a href="how-it-works.html">How it works</a>
+          <a className={tab === 'support' ? 'on' : ''} href="support.html">Support</a>
         </nav>
         <div className="top-actions">
           {install && <button className="btn btn-outline btn-sm hide-sm" onClick={install}><Download size={16}/>Install app</button>}
@@ -92,6 +95,8 @@ function App() {
           : file === 'account.html' ? <AccountPage/>
           : file === 'admin.html' ? <AdminPage/>
           : file === 'profile.html' ? <ProfilePage/>
+          : file === 'support.html' ? <SupportPage/>
+          : file === 'rules.html' ? <RulesPage/>
           : file === 'job.html' ? <Detail/>
           : file === 'saved-jobs.html' ? <Saved/>
           : file === 'how-it-works.html' ? <How/>
@@ -107,7 +112,7 @@ function App() {
         <div><a className="brand small" href="index.html"><Logo/><span>community<b>work</b></span></a><p>Opportunity starts in your community.</p></div>
         <nav aria-label="Footer">
           <a href="find-work.html">Find work</a><a href="find-work.html?mode=remote">Online jobs</a><a href="shifts.html">Paid shifts</a><a href="account.html?signup=1&type=business">Hire workers</a><a href="cv-builder.html">CV builder</a>
-          <a href="how-it-works.html">How it works</a><a href="about.html">About</a><a href="help.html">Help</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a>
+          <a href="how-it-works.html">How it works</a><a href="about.html">About</a><a href="support.html">Support</a><a href="rules.html">Community rules</a><a href="help.html">Help</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a>
         </nav>
         <small>South Africa · All nine provinces · Some links are sponsored or affiliate links: we may earn a commission, at no cost to you.</small>
       </footer>
@@ -115,10 +120,10 @@ function App() {
       {!adFreePages.includes(file) && <HangingOffer/>}
 
       <nav className="tabbar" aria-label="App">
-        <a className={tab === 'home' || tab === 'jobs' ? 'on' : ''} href="index.html"><House size={22}/><span>Jobs</span></a>
-        <a className={tab === 'online' ? 'on' : ''} href="find-work.html?mode=remote"><Globe size={22}/><span>Online</span></a>
-        <a className={'post' + (tab === 'shifts' ? ' on' : '')} href="shifts.html"><span className="post-fab"><CalendarDays size={24}/></span><span>Shifts</span></a>
+        <a className={tab === 'home' || tab === 'jobs' || tab === 'online' ? 'on' : ''} href="index.html"><House size={22}/><span>Jobs</span></a>
         <a className={tab === 'saved' ? 'on' : ''} href="saved-jobs.html"><Bookmark size={22}/><span>Saved</span></a>
+        <a className={'post' + (tab === 'shifts' ? ' on' : '')} href="shifts.html"><span className="post-fab"><CalendarDays size={24}/></span><span>Shifts</span></a>
+        <a className={tab === 'support' ? 'on' : ''} href="support.html"><LifeBuoy size={22}/><span>Support</span></a>
         <a className={tab === 'account' ? 'on' : ''} href="account.html"><UserRound size={22}/><span>{signedIn ? 'Account' : 'Sign in'}</span></a>
       </nav>
 
@@ -134,6 +139,9 @@ function App() {
             <a href="cv-builder.html"><FileUser size={20}/>Build your CV</a>
             <a href="how-it-works.html"><BriefcaseBusiness size={20}/>How it works</a>
             <a href="about.html"><Info size={20}/>About</a>
+            <a href="support.html"><LifeBuoy size={20}/>Support · ask Randy</a>
+            <a href="rules.html"><BookOpen size={20}/>Community rules</a>
+            <a href="find-work.html?mode=remote"><Globe size={20}/>Online jobs</a>
             <a href="help.html"><CircleHelp size={20}/>Help & safety</a>
             <a href="privacy.html"><Lock size={20}/>Privacy</a>
             <a href="terms.html"><FileText size={20}/>Terms</a>
@@ -344,7 +352,7 @@ const faqs: [string, string][] = [
   ['My location isn’t working.', 'Allow location for this site or app in your phone settings, then tap “Use my current location”. Or just tap your city — that works without GPS.'],
   ['Where do the online and in-person jobs come from?', 'Besides shifts posted here, in-person jobs come straight from South African employers’ own careers pages, and online jobs from public job boards such as Remotive, Jobicy, Himalayas, Remote OK, Working Nomads and We Work Remotely. Tap Apply to open the original advert and apply there. Listings refresh several times a day.'],
   ['How do I make a CV?', 'Open CV builder from the menu. Fill in your details, choose a template and colour, then download a PDF or Word file. Everything stays on your device, and you can export a save file to keep editing later.'],
-  ['Why am I seeing no jobs?', 'Your filters may be too narrow. Choose “Anywhere in SA”, clear the category or search, and check the In person and Online tabs.'],
+  ['Why am I seeing no jobs?', 'Your filters may be too narrow. Choose “Anywhere in SA”, clear the category or search, and check the In person and Online filters on the Jobs page.'],
   ['How is distance calculated?', 'It’s the straight-line distance between your area and the workplace. Travel by road will be longer.'],
   ['How do hourly and total pay work?', 'Hourly pay is multiplied by the hours to estimate the shift total. Total-job pay is divided by the hours when filtering by hourly pay.'],
   ['How do shifts and pay work?', 'A business posts a shift with an hourly rate. You apply with your profile and CV. If they book you on an escrow shift, they pay the full amount to TradeSafe, a South African escrow company, before you start. After the shift the hours are confirmed and the money is paid into your bank account. Cash shifts are paid in person by the business.'],
