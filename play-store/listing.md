@@ -80,6 +80,7 @@ Play accepts PNG or JPEG screenshots. To convert the .webp files, open one in an
 
 - **Target audience:** 18 and over only.
 - **Ads:** **Yes, contains ads** (affiliate ads on the job pages).
+- **Advertising ID:** **No** — the affiliate ads are plain links on the website; the app never reads the Android advertising ID, so the bundle has no `AD_ID` permission.
 - **Government app:** No. **Financial features:** none of the listed ones (escrow is handled by TradeSafe, a licensed provider).
 - **App access:** some features need an account — give reviewers a test login: create a worker account (and switch on Hiring), then enter its email and password under *App access*.
 
