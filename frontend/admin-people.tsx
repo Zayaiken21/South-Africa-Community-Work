@@ -31,13 +31,21 @@ type Filter = 'all' | 'workers' | 'business' | 'paused' | 'banned';
 export function PeopleAdmin({sb}: {sb: SupabaseClient}) {
   const [q, setQ] = useState(''), [rows, setRows] = useState<Person[] | null>(null), [err, setErr] = useState('');
   const [filter, setFilter] = useState<Filter>('all'), [banFor, setBanFor] = useState<Person | null>(null);
-  const load = (search = q) => sb.rpc('admin_users', {p_search: search, p_limit: 200, p_offset: 0}).then(({data, error}) => error ? setErr(error.message) : setRows(data as Person[]));
+  // Before database update 10 the list has no working/hiring details, so fall back to the account type and allow whole-account bans only.
+  const [legacy, setLegacy] = useState(false);
+  const load = (search = q) => sb.rpc('admin_users', {p_search: search, p_limit: 200, p_offset: 0}).then(({data, error}) => {
+    if (error) return setErr(error.message);
+    const list = (data || []) as (Person & {account_type?: 'worker' | 'business'})[];
+    const old = list.length > 0 && list[0].can_work === undefined;
+    setLegacy(old);
+    setRows(old ? list.map(p => ({...p, can_work: p.account_type !== 'business', can_hire: p.account_type === 'business' || !!p.business_name, active_mode: p.account_type})) : list);
+  });
   useEffect(() => { load(''); }, []);
   const flag = async (id: string, patch: {p_verified?: boolean; p_suspended?: boolean}) => { const {error} = await sb.rpc('admin_set_flags', {p_user: id, ...patch}); if (error) alert(error.message); load(); };
   const lift = async (p: Person, scope: 'account' | 'work' | 'business') => {
     const what = scope === 'account' ? 'the account ban' : scope === 'work' ? 'the ban on working' : 'the ban on their business';
     if (!confirm(`Lift ${what} for ${p.full_name || p.email}?`)) return;
-    const {error} = await sb.rpc('admin_ban', {p_user: p.id, p_scope: scope, p_on: false, p_reason: null});
+    const {error} = legacy ? await sb.rpc('admin_set_flags', {p_user: p.id, p_banned: false}) : await sb.rpc('admin_ban', {p_user: p.id, p_scope: scope, p_on: false, p_reason: null});
     if (error) alert(error.message); load();
   };
   const shown = (rows || []).filter(p => filter === 'all' ? true
@@ -53,12 +61,13 @@ export function PeopleAdmin({sb}: {sb: SupabaseClient}) {
       <div className="chip-wrap">{([['all', 'Everyone'], ['workers', 'Workers'], ['business', 'Businesses'], ['paused', 'Paused'], ['banned', 'Banned']] as [Filter, string][]).map(([k, l]) =>
         <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{l} <em className="count">{rows ? count(k) : ''}</em></button>)}</div>
       {err && <Note kind="error">{err}</Note>}
+      {legacy && <Note kind="error">Your database is missing the latest update, so phone numbers, photos and separate bans (working only / business only) aren’t available yet. In Supabase → SQL Editor, run <strong>supabase/run-updates.sql</strong>, then refresh this page.</Note>}
       {!rows ? <div className="card-panel center"><span className="spinner"/></div>
         : !shown.length ? <div className="empty small"><h3>Nobody here</h3><p>Try another filter or search.</p></div>
         : <div className="people-grid">{shown.map(p => <PersonCard key={p.id} p={p} onVerify={() => flag(p.id, {p_verified: !p.verified})}
             onSuspend={() => confirm(p.suspended ? 'Restore this account?' : 'Pause this account? They can’t work or hire until restored, but they can appeal.') && flag(p.id, {p_suspended: !p.suspended})}
             onBan={() => setBanFor(p)} onLift={s => lift(p, s)}/>)}</div>}
-      {banFor && <BanSheet sb={sb} p={banFor} onClose={() => setBanFor(null)} onDone={() => { setBanFor(null); load(); }}/>}
+      {banFor && <BanSheet sb={sb} p={banFor} legacy={legacy} onClose={() => setBanFor(null)} onDone={() => { setBanFor(null); load(); }}/>}
     </div>
   );
 }
@@ -125,9 +134,9 @@ function PersonCard({p, onVerify, onSuspend, onBan, onLift}: {p: Person; onVerif
   );
 }
 
-function BanSheet({sb, p, onClose, onDone}: {sb: SupabaseClient; p: Person; onClose: () => void; onDone: () => void}) {
-  const hasBiz = !!p.business_name && !!p.can_hire && !p.hire_banned;
-  const works = !!p.can_work && !p.work_banned;
+function BanSheet({sb, p, legacy, onClose, onDone}: {sb: SupabaseClient; p: Person; legacy: boolean; onClose: () => void; onDone: () => void}) {
+  const hasBiz = !legacy && !!p.business_name && !!p.can_hire && !p.hire_banned;
+  const works = !legacy && !!p.can_work && !p.work_banned;
   const [scope, setScope] = useState<'account' | 'work' | 'business'>(hasBiz && !works ? 'business' : 'account');
   const [reason, setReason] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState('');
   const who = p.full_name || p.email;
@@ -140,6 +149,12 @@ function BanSheet({sb, p, onClose, onDone}: {sb: SupabaseClient; p: Person; onCl
     <Sheet title="Ban permanently" onClose={onClose}>
       <form className="form" onSubmit={async e => {
         e.preventDefault(); setBusy(true); setErr('');
+        if (legacy) {
+          const {error} = await sb.rpc('admin_set_flags', {p_user: p.id, p_banned: true});
+          setBusy(false);
+          if (error) return setErr(error.message);
+          return onDone();
+        }
         const {data, error} = await sb.rpc('admin_ban', {p_user: p.id, p_scope: scope, p_on: true, p_reason: reason.trim() || null});
         setBusy(false);
         if (error) return setErr(error.message);
@@ -147,12 +162,15 @@ function BanSheet({sb, p, onClose, onDone}: {sb: SupabaseClient; p: Person; onCl
         onDone();
       }}>
         <p className="muted">Bans are permanent and can’t be appealed. To give someone a second chance, use <strong>Pause</strong> instead. Every ban is logged with your name.</p>
+        {legacy && <Note kind="error">Only a whole-account ban is possible until you run <strong>supabase/run-updates.sql</strong> in Supabase. After that you can also ban just the working side or just the business.</Note>}
         <div className="ban-options">{options.filter(o => o[3]).map(([k, title, text]) => (
           <label key={k} className={'ban-option' + (scope === k ? ' on' : '')}>
             <input type="radio" name="scope" checked={scope === k} onChange={() => setScope(k)}/>
             <span><strong>{title}</strong><small>{text}</small></span>
           </label>))}</div>
+{!legacy && (
         <label className="field">Reason (they’ll see this)<textarea className="wrap-text" rows={3} maxLength={300} value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Didn’t pay workers for three shifts"/><small>{reason.length}/300</small></label>
+        )}
         {err && <Note kind="error">{err}</Note>}
         <button className="btn btn-block btn-danger" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17}/> : <Ban size={17}/>}Ban permanently</button>
       </form>
