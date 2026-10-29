@@ -1,7 +1,7 @@
 // In-person South African jobs straight from employers' public hiring-system feeds (no keys needed).
 // See sa-employers.mjs for the list of employers that are tried.
 
-import {employers, knownBoards, workdayBoards} from './sa-employers.mjs';
+import {employers, knownBoards, workdayBoards, companyNames} from './sa-employers.mjs';
 
 const UA = 'CommunityWorkSA/1.0 (+https://github.com/Zayaiken21/South-Africa-Community-Work)';
 const WEEK = 7 * 864e5;
@@ -22,7 +22,7 @@ const systems = {
   async gh(name) {
     const d = await get(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(name)}/jobs?content=true`);
     if (!d || !Array.isArray(d.jobs)) return null;
-    const company = d.meta?.name || name;
+    const company = companyNames[name.toLowerCase()] || d.meta?.name || prettify(name);
     return d.jobs.map(j => ({id: `gh:${name}:${j.id}`, title: j.title, company, url: j.absolute_url, location: j.location?.name || (j.offices || []).map(o => o.name).join(', '),
       posted: j.updated_at || j.first_published, team: (j.departments || []).map(x => x.name).join(' '), html: decode(j.content)}));
   },
@@ -98,7 +98,7 @@ let wkLimited = false, wkCount = 0, wkChain = Promise.resolve();
 const wkTurn = () => (wkChain = wkChain.then(() => new Promise(res => setTimeout(res, Number(process.env.WORKABLE_DELAY_MS ?? 1500)))));
 
 const decode = s => String(s || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-const prettify = s => s.replace(/[-_]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, c => c.toUpperCase());
+const prettify = s => companyNames[s.toLowerCase()] || s.replace(/[-_]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, c => c.toUpperCase());
 
 // Every name on every system, known-good boards first, then a rotating slice of untried or failed ones.
 function plan(state) {
@@ -144,7 +144,7 @@ async function workday(b) {
     for (const j of d.jobPostings) {
       if (!j.title || !j.externalPath) continue;
       out.push({id: `wd:${b.tenant}:${j.bulletFields?.[0] || j.externalPath}`, title: j.title, company: b.company, url: `${base}/en-US/${b.site}${j.externalPath}`,
-        location: j.locationsText || '', posted: workdayDate(j.postedOn), saSite: !!b.sa});
+        location: j.locationsText || '', posted: workdayDate(j.postedOn), saSite: !!b.sa, category: b.category});
     }
     if (d.total) total = d.total;
     if (d.jobPostings.length < 20 || (total && offset + 20 >= total)) break;
@@ -183,7 +183,7 @@ export async function atsJobs(state, h) {
       jobs.push({
         id: j.id, source: 'Employer sites', sourceUrl: j.url, url: j.url, title: h.strip(j.title), company: h.strip(j.company),
         mode: remote ? 'remote' : 'onsite', location: remote ? 'South Africa (remote)' : where, province: pos.province, lat: pos.lat, lon: pos.lon,
-        category: h.categorize(j.title, j.team), type: j.type ? h.strip(j.type) : undefined, salary: j.salary || undefined,
+        category: (c => c === 'Other' && j.category ? j.category : c)(h.categorize(j.title, j.team)), type: j.type ? h.strip(j.type) : undefined, salary: j.salary || undefined,
         posted: h.iso(j.posted) || new Date().toISOString(), seenAt: new Date().toISOString(), excerpt: h.excerpt(j.html),
       });
     }
