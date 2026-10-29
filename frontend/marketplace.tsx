@@ -7,7 +7,7 @@
     CEO dashboard — overview, live, people, support, appeals, payments, affiliate ads, team, settings, activity log
   All data comes from Supabase; the database rules decide what each person may see and change.
 */
-import {useEffect, useState} from 'react';
+import {Component, useEffect, useState} from 'react';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {
   UserRound,
@@ -3460,6 +3460,25 @@ function TwoFactor({sb, onDone, onCancel}: {sb: SupabaseClient; onDone: () => vo
   );
 }
 
+/** If one dashboard tab hits an error, show it with a retry button instead of a blank page. */
+class TabGuard extends Component<{children: React.ReactNode}, {error: string}> {
+  state = {error: ''};
+  static getDerivedStateFromError(e: unknown) {
+    return {error: errorText(e)};
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <Notice kind="error">
+        This part of the dashboard couldn’t load: {this.state.error}{' '}
+        <button className="link" onClick={() => this.setState({error: ''})}>
+          Try again
+        </button>
+      </Notice>
+    );
+  }
+}
+
 /** CEO dashboard tabs: [key, label, icon]. */
 const ADMIN_TABS: [string, string, React.ComponentType<{size?: number}>][] = [
   ['overview', 'Overview', LayoutDashboard],
@@ -3596,18 +3615,20 @@ function AdminConsole({
           </button>
         ))}
       </nav>
-      <div className="dash-body" key={tab}>
-        {tab === 'overview' && <Overview sb={sb} go={setTab} />}
-        {tab === 'live' && <Live sb={sb} />}
-        {tab === 'users' && <PeopleAdmin sb={sb} />}
-        {tab === 'ads' && <AdsAdmin sb={sb} role={role} />}
-        {tab === 'support' && <SupportAdmin sb={sb} />}
-        {tab === 'appeals' && <AppealsAdmin sb={sb} />}
-        {tab === 'payments' && <PaymentsAdmin sb={sb} />}
-        {tab === 'team' && <TeamAdmin sb={sb} role={role} me={me} />}
-        {tab === 'settings' && <SettingsAdmin sb={sb} />}
-        {tab === 'audit' && <AuditAdmin sb={sb} />}
-      </div>
+      <TabGuard key={tab}>
+        <div className="dash-body">
+          {tab === 'overview' && <Overview sb={sb} go={setTab} />}
+          {tab === 'live' && <Live sb={sb} />}
+          {tab === 'users' && <PeopleAdmin sb={sb} />}
+          {tab === 'ads' && <AdsAdmin sb={sb} role={role} />}
+          {tab === 'support' && <SupportAdmin sb={sb} />}
+          {tab === 'appeals' && <AppealsAdmin sb={sb} />}
+          {tab === 'payments' && <PaymentsAdmin sb={sb} />}
+          {tab === 'team' && <TeamAdmin sb={sb} role={role} me={me} />}
+          {tab === 'settings' && <SettingsAdmin sb={sb} />}
+          {tab === 'audit' && <AuditAdmin sb={sb} />}
+        </div>
+      </TabGuard>
     </div>
   );
 }

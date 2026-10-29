@@ -1,6 +1,6 @@
-const CACHE='cw-ff5999261e';
+const CACHE='cw-d410bc8361';
 /** Files the service worker keeps for offline use. */
-const SHELL=['./','./index.html','./find-work.html','./shifts.html','./account.html','./saved-jobs.html','./job.html','./offline.html','./cv-builder.html','./assets/community-app.js?v=ff5999261e','./assets/community-app.css?v=ff5999261e','./assets/favicon.svg','./assets/icons/icon-192.png','./manifest.webmanifest'];
+const SHELL=['./','./index.html','./find-work.html','./shifts.html','./account.html','./saved-jobs.html','./job.html','./offline.html','./cv-builder.html','./assets/community-app.js?v=d410bc8361','./assets/community-app.css?v=d410bc8361','./assets/favicon.svg','./assets/icons/icon-192.png','./manifest.webmanifest'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(n=>n!==CACHE).map(n=>caches.delete(n)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',e=>{

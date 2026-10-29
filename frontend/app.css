@@ -5156,10 +5156,10 @@ dd {
   background: var(--green-soft);
 }
 
-/* CEO view: just Jobs, Online jobs and the dashboard in the bottom bar */
+/* CEO view: just Jobs and the dashboard in the bottom bar (online jobs are inside Jobs) */
 @media (max-width: 860px) {
-  .tabbar.three {
-    grid-template-columns: repeat(3, 1fr);
+  .tabbar.two {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -5225,4 +5225,47 @@ dd {
 }
 .who.member {
   color: var(--green);
+}
+
+/* ---------- Support live chat ---------- */
+.ticket.embedded {
+  border: 2px solid var(--green);
+}
+.chat-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.chat-state svg {
+  flex: none;
+}
+.chat-state .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  flex: none;
+}
+.chat-state .dot.on {
+  background: #2fbf71;
+  box-shadow: 0 0 0 3px rgba(47, 191, 113, 0.2);
+}
+.ticket .thread {
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+}
+.pill.paused {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+.needs-reply {
+  color: var(--red);
+  font-weight: 700;
 }

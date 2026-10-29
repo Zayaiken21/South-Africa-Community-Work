@@ -40,7 +40,7 @@ import {
 import {Avatar} from './profile';
 import {Sheet} from './JobsView';
 import {OfferCard, type Offer} from './ads';
-import {ONLINE_CHANNEL, type OnlinePerson} from './analytics';
+import {watchOnline, type OnlineList} from './analytics';
 import {browseCategories} from './catalog';
 
 /** "5 min ago", "2 h ago", or a date. */
@@ -744,20 +744,10 @@ type Named = {
 const who = (p: {name?: string | null; business?: string | null; email?: string | null}) =>
   [p.name, p.business && `(${p.business})`].filter(Boolean).join(' ') || p.email || 'Signed-in member';
 
-/** People on the site this moment, from the live "online now" channel every open page joins. */
-function useOnlineNow(sb: SupabaseClient) {
-  const [people, setPeople] = useState<{key: string; info: OnlinePerson}[]>([]);
-  useEffect(() => {
-    const ch = sb.channel(ONLINE_CHANNEL);
-    const sync = () =>
-      setPeople(
-        Object.entries(ch.presenceState<OnlinePerson>()).map(([key, list]) => ({key, info: list[list.length - 1]})),
-      );
-    ch.on('presence', {event: 'sync'}, sync).subscribe();
-    return () => {
-      sb.removeChannel(ch);
-    };
-  }, []);
+/** People on the site this moment, from the shared live "online now" channel every open page joins. */
+function useOnlineNow() {
+  const [people, setPeople] = useState<OnlineList>([]);
+  useEffect(() => watchOnline(setPeople), []);
   return people;
 }
 
@@ -772,7 +762,7 @@ export function LiveFeed({sb}: {sb: SupabaseClient}) {
   const [minutes, setMinutes] = useState(30);
   const [data, setData] = useState<LiveData | null>(null),
     [err, setErr] = useState('');
-  const online = useOnlineNow(sb);
+  const online = useOnlineNow();
   const [names, setNames] = useState<Record<string, Named>>({});
   useEffect(() => {
     let alive = true;

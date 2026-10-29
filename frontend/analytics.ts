@@ -2,6 +2,7 @@
 // 1. Your own records: anonymous events saved to the Supabase `events` table (no cookies; a random visitor id in
 //    local storage). These feed the CEO dashboard: visitors, page views, job "Apply" clicks, affiliate ad views/clicks.
 // 2. Google Analytics 4: loaded only after the visitor accepts analytics cookies. Set the ID in /analytics-config.json.
+import type {RealtimeChannel, SupabaseClient} from '@supabase/supabase-js';
 import {backend} from './backend';
 
 /** analytics-config.json: the optional Google Analytics ID. */
@@ -151,6 +152,36 @@ export const ONLINE_CHANNEL = 'online-now';
 /** One person on the site right now, as the dashboard sees them (no names — just where they are). */
 export type OnlinePerson = {path: string; signedIn: boolean; since: string; userId?: string};
 
+/** Everyone online right now, keyed by their random visitor id. */
+export type OnlineList = {key: string; info: OnlinePerson}[];
+
+// One shared connection per page. The realtime library hands back the same channel for the same name, and a channel
+// can't take new listeners once it's connected — so the page and the dashboard both go through these helpers.
+let onlineChannel: RealtimeChannel | null = null;
+let onlineNow: OnlineList = [];
+let onlineMe: OnlinePerson | null = null;
+let onlineReady = false;
+const onlineListeners = new Set<(list: OnlineList) => void>();
+
+/** Opens the shared "online now" channel once, with the presence listener added before connecting. */
+function openOnline(sb: SupabaseClient) {
+  if (onlineChannel) return onlineChannel;
+  const ch = sb.channel(ONLINE_CHANNEL, {config: {presence: {key: visitor || 'anonymous'}}});
+  ch.on('presence', {event: 'sync'}, () => {
+    onlineNow = Object.entries(ch.presenceState<OnlinePerson>()).map(([key, list]) => ({
+      key,
+      info: list[list.length - 1],
+    }));
+    onlineListeners.forEach(f => f(onlineNow));
+  });
+  ch.subscribe(status => {
+    onlineReady = status === 'SUBSCRIBED';
+    if (onlineReady && onlineMe) ch.track(onlineMe);
+  });
+  onlineChannel = ch;
+  return ch;
+}
+
 /**
  * Joins the live "online now" channel with this visitor's random id and current page. Nothing is stored: when the page
  * closes or goes offline, they drop off the list within seconds.
@@ -159,14 +190,22 @@ async function joinOnline() {
   const sb = await backend();
   if (!sb || !visitor) return;
   const {data} = await sb.auth.getSession();
-  const me: OnlinePerson = {
+  onlineMe = {
     path: location.pathname.split('/').pop() || 'index.html',
     signedIn: !!data.session,
     since: new Date().toISOString(),
     userId: data.session?.user.id,
   };
-  const channel = sb.channel(ONLINE_CHANNEL, {config: {presence: {key: visitor}}});
-  channel.subscribe(status => {
-    if (status === 'SUBSCRIBED') channel.track(me);
-  });
+  const ch = openOnline(sb);
+  if (onlineReady) ch.track(onlineMe);
+}
+
+/** Calls `onChange` with everyone online now, and again whenever that changes. Returns a function to stop. */
+export function watchOnline(onChange: (list: OnlineList) => void) {
+  onlineListeners.add(onChange);
+  onChange(onlineNow);
+  backend().then(sb => sb && openOnline(sb));
+  return () => {
+    onlineListeners.delete(onChange);
+  };
 }
