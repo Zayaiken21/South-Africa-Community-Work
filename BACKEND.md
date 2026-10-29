@@ -22,7 +22,7 @@ Do these steps once, in order. Nothing here needs a terminal except step 5.
 | `supabase/migrations/20261028240000_count_people_not_bookings.sql` | Worker counts count people, not bookings |
 | `supabase/migrations/20261028260000_hide_own_shifts.sql` | You never see your own business's shifts on the shift board |
 | `supabase/migrations/20261028280000_support_queue_shift_rules.sql` | Support queue (Randy hands over to a person, CEO dashboard → Support) and 4–12 hour shifts |
-| `supabase/migrations/20261028300000_ceo_mode_bans_ads.sql` | Ban or pause a person, only their working side, or only their business; CEO view for team accounts; sponsored offers edited in CEO dashboard → Ads |
+| `supabase/migrations/20261028300000_ceo_mode_bans_ads.sql` | Ban or pause a person, only their working side, or only their business; CEO view for team accounts; affiliate ads (text or uploaded banners) managed in CEO dashboard → Affiliate ads |
 
 Or paste `supabase/run-updates.sql`, which has all of them in order and is safe to run again. They keep all existing data. `supabase/repair-accounts.sql` fixes logins created before the database was set up.
 

@@ -77,12 +77,14 @@ function Rich({text}: {text: string}) {
 }
 
 type Msg = {from: 'randy' | 'me'; text: string; chips?: string[]; handoff?: boolean};
-const OTHER = 'Other questions';
+// A stored question written the way people read it: capital first letter, a capital “I”, and a question mark.
+const asQuestion = (q: string) => q.replace(/^./, c => c.toUpperCase()).replace(/\bi\b/g, 'I') + '?';
+const MENU = 'What else can I help with? Pick a topic, or type your question.';
 const GREETING = 'Hi, I’m **Randy** 👋 I can help with payments, shifts, strikes, your account, hiring and our rules. Ask me anything, or pick a topic.';
 
 export function RandyChat({onHandoff}: {onHandoff: (question: string) => void}) {
   const acct = useAccount();
-  const [msgs, setMsgs] = useState<Msg[]>([{from: 'randy', text: GREETING, chips: ['When do I get paid?', 'How do I pick up a shift?', 'How do strikes work?', 'How do I post a shift?', 'Talk to a person']}]);
+  const [msgs, setMsgs] = useState<Msg[]>([{from: 'randy', text: GREETING, chips: ['When do I get paid?', 'How do I pick up a shift?', 'How do strikes work?', 'How do I post a shift?']}]);
   const [text, setText] = useState(''), [typing, setTyping] = useState(false);
   const [live, setLive] = useState<Live | null>(null);
   const lastQ = useRef('');
@@ -92,10 +94,15 @@ export function RandyChat({onHandoff}: {onHandoff: (question: string) => void}) 
     Promise.all([acct.sb.rpc('public_settings'), acct.session ? acct.sb.rpc('my_summary') : Promise.resolve({data: null})]).then(([{data: s}, {data: sum}]: any) =>
       setLive({settings: s, strikes: acct.profile?.strikes, payout: acct.profile?.payout_ready, mode: acct.profile ? modes(acct.profile).active : undefined, next: sum?.worker?.next}));
   }, [acct.sb, acct.session?.user.id, acct.profile?.strikes]);
-  // Keep the start of the newest message in view, so long answers read from the top.
+  // The chat grows with the page (no small scroll box, so no bubble is ever cut off). After each new message the page
+  // scrolls so the question and the start of Randy's answer are in view; nothing moves when the page first opens.
   useEffect(() => {
-    const box = list.current, last = box?.lastElementChild as HTMLElement | null;
-    if (box && last) box.scrollTo({top: Math.max(0, last.offsetTop - 12), behavior: 'smooth'});
+    const rows = list.current?.children;
+    if (!rows || msgs.length < 2) return;
+    const last = rows[rows.length - 1] as HTMLElement, prev = rows[rows.length - 2] as HTMLElement | undefined;
+    const target = !typing && prev?.classList.contains('me') ? prev : last;
+    const r = target.getBoundingClientRect();
+    if (r.top < 80 || r.bottom > window.innerHeight - 90) target.scrollIntoView({behavior: 'smooth', block: 'start'});
   }, [msgs, typing]);
 
   function ask(q: string) {
@@ -114,23 +121,22 @@ export function RandyChat({onHandoff}: {onHandoff: (question: string) => void}) 
       if (own) { setMsgs(m => [...m, {from: 'randy', text: own}]); return; }
       const hits = bestAnswers(question);
       if (!hits.length) {
-        setMsgs(m => [...m, {from: 'randy', text: 'I’m not sure about that one yet. Pick a topic, try asking another way, or I can hand you to a person.', chips: [...topics.slice(0, 5).map(t => t[1]), 'Talk to a person']}]);
+        setMsgs(m => [...m, {from: 'randy', text: 'I’m not sure about that one yet. Pick a topic, try asking another way, or I can hand you to a person.', chips: topics.slice(0, 6).map(t => t[1])}]);
         return;
       }
       const [top, ...more] = hits;
-      setMsgs(m => [...m, {from: 'randy', text: fill(top.entry.a, live?.settings), chips: [...more.map(h => h.entry.q[0].replace(/^./, c => c.toUpperCase()) + '?'), OTHER, 'Talk to a person']}]);
+      setMsgs(m => [...m, {from: 'randy', text: fill(top.entry.a, live?.settings), chips: more.map(h => asQuestion(h.entry.q[0]))}]);
     }, 450 + Math.min(question.length * 8, 600));
   }
   // Back to the list of topics, from anywhere in the chat.
   function menu() {
-    setMsgs(m => [...m, {from: 'me', text: OTHER}, {from: 'randy', text: 'Sure! What else can I help with? Pick a topic, or type your question.', chips: [...topics.map(t => t[1]), 'Talk to a person']}]);
+    setMsgs(m => m[m.length - 1]?.text === MENU ? m : [...m, {from: 'randy', text: MENU, chips: topics.map(t => t[1])}]);
   }
   function chip(c: string) {
-    if (c === OTHER) return menu();
     const t = topics.find(x => x[1] === c);
     if (t) {
       const entries = knowledge.filter(e => e.topic === t[0]).slice(0, 8);
-      setMsgs(m => [...m, {from: 'me', text: c}, {from: 'randy', text: `Here are common questions about **${c.toLowerCase()}**:`, chips: [...entries.map(e => e.q[0].replace(/^./, x => x.toUpperCase()) + '?'), OTHER]}]);
+      setMsgs(m => [...m, {from: 'me', text: c}, {from: 'randy', text: `Here are common questions about **${c.toLowerCase()}**:`, chips: entries.map(e => asQuestion(e.q[0]))}]);
       return;
     }
     ask(c);
@@ -148,7 +154,7 @@ export function RandyChat({onHandoff}: {onHandoff: (question: string) => void}) 
             {m.from === 'randy' && <span className="mini-face"><Bot size={15}/></span>}
             <div className="bubble-col">
               <div className={'bubble ' + m.from}><Rich text={m.text}/></div>
-              {m.chips && i === msgs.length - 1 && <div className="chip-wrap randy-chips">{m.chips.map(c => <button key={c} className={c === OTHER ? 'chip-back' : ''} onClick={() => chip(c)}>{c === 'Talk to a person' ? <><Users size={13}/>{c}</> : c === OTHER ? <><ArrowLeft size={13}/>{c}</> : c}</button>)}</div>}
+              {m.chips && i === msgs.length - 1 && <div className="chip-wrap randy-chips">{m.chips.map(c => <button key={c} onClick={() => chip(c)}>{c}</button>)}</div>}
             </div>
           </div>
         ))}
@@ -275,7 +281,7 @@ function FaqList() {
     <section className="card-panel faq-panel">
       <h2>Common questions</h2>
       <div className="chip-wrap">{topics.map(([k, l]) => <button key={k} className={topic === k ? 'on' : ''} onClick={() => setTopic(k)}>{l}</button>)}</div>
-      {list.map(e => <details className="faq" key={e.id}><summary>{e.q[0].replace(/^./, c => c.toUpperCase())}?</summary><p><Rich text={fill(e.a, settings)}/></p></details>)}
+      {list.map(e => <details className="faq" key={e.id}><summary>{asQuestion(e.q[0])}</summary><p><Rich text={fill(e.a, settings)}/></p></details>)}
     </section>
   );
 }

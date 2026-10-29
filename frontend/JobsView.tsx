@@ -1,9 +1,8 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {
-  MapPin, Search, SlidersHorizontal, LoaderCircle, Navigation, Bookmark, ArrowUpRight, Globe, X, Check, Plus,
+  MapPin, Search, SlidersHorizontal, LoaderCircle, Navigation, Bookmark, ArrowUpRight, Globe, X, Plus,
   BriefcaseBusiness, ChevronDown, LocateFixed, RefreshCw, Users, Laptop, Building2, FileUser, ArrowRight,
 } from 'lucide-react';
-import {provinces, categories as postCategories} from '../lib/jobs';
 import {LocationPicker} from './LocationPicker';
 import {autoLocate} from './location';
 import {AdSlot} from './ads';
@@ -319,8 +318,7 @@ export default function JobsView({welcome = false}: {welcome?: boolean}) {
                 {list.slice(0, shown).map((l, i) => (
                   <Fragment key={l.key}>
                     <JobCard job={l} saved={saved.has(l.key)} onSave={() => save(l)}/>
-                    {/* One ad after the 4th job, then every 8 jobs — never above the first results */}
-                    {/* Sponsored spot after the 5th job, then every 10 — matched to the job just above it */}
+                    {/* Affiliate ad after the 5th job, then every 10 — matched to the job just above it */}
                     {i >= 4 && (i - 4) % 10 === 0 && i < list.length - 1 && <AdSlot spot="feed" index={(i - 4) / 10} category={l.category} mode={l.mode}/>}
                   </Fragment>
                 ))}
@@ -458,114 +456,5 @@ export function Sheet({title, onClose, wide = false, children}: {title: string; 
       <div className="sheet-head"><h2>{title}</h2><button className="icon-btn" aria-label="Close" onClick={onClose}><X size={22}/></button></div>
       <div className="sheet-body">{children}</div>
     </dialog>
-  );
-}
-
-// ---------- Posting form (same API contract as before) ----------
-
-export function PostForm({onDone}: {onDone: () => void}) {
-  const [spot, setSpot] = useState<Location | null>(null);
-  const [picking, setPicking] = useState(false);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [payType, setPayType] = useState('hour');
-  const [city, setCity] = useState('');
-  const [province, setProvince] = useState('');
-
-  function pickSpot(l: Location) {
-    setSpot(l); setPicking(false);
-    const parts = l.label.split(',').map(s => s.trim());
-    const prov = provinces.find(p => parts.includes(p));
-    if (prov && !province) setProvince(prov);
-    if (!city) {
-      const guess = parts.filter(p => p !== prov && !/^\d/.test(p) && p !== 'My current location');
-      if (guess.length) setCity(guess[guess.length - 1]);
-    }
-  }
-
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!spot) { setError('Set the workplace location before posting.'); return; }
-    setBusy(true); setError('');
-    const f = new FormData(e.currentTarget);
-    const body: any = Object.fromEntries(f.entries());
-    delete body.confirm;
-    for (const k of ['pay', 'hours', 'radius']) body[k] = Number(body[k]);
-    body.radius = milesToKm(body.radius);
-    body.latitude = spot.lat; body.longitude = spot.lon;
-    body.start = String(body.start) + ':00+02:00';
-    try {
-      const r = await fetch(API, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-      const data: any = await r.json();
-      if (!r.ok) throw Error(data.error);
-      onDone();
-    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to post job'); }
-    finally { setBusy(false); }
-  }
-
-  if (picking) return (
-    <div className="form">
-      <h2 className="form-step">Where is the work?</h2>
-      <LocationPicker purpose="post" onSelect={pickSpot}/>
-      <button type="button" className="btn btn-outline" onClick={() => setPicking(false)}>Back to job details</button>
-    </div>
-  );
-
-  return (
-    <form className="form" onSubmit={submit}>
-      <h2 className="form-step"><span>1</span>The job</h2>
-      <label className="field">Job title<input name="title" placeholder="e.g. Weekend kitchen assistant" required minLength={2} maxLength={100}/></label>
-      <label className="field">Business or your name<input name="business" placeholder="Who is hiring?" required minLength={2} maxLength={120}/></label>
-      <label className="field">What the work involves<textarea name="description" rows={4} placeholder="Duties, skills, experience and any equipment needed." minLength={2} maxLength={4000} required/></label>
-      <label className="field">Category
-        <select name="category" required defaultValue="">
-          <option value="" disabled>Select category</option>
-          {postCategories.map(c => <option key={c}>{c}</option>)}
-        </select>
-      </label>
-
-      <h2 className="form-step"><span>2</span>Where</h2>
-      <button type="button" className={'location-set' + (spot ? ' done' : '')} onClick={() => setPicking(true)}>
-        <MapPin size={21}/>
-        <span><strong>{spot ? spot.label : 'Set the workplace location'}</strong><small>{spot ? 'Tap to change' : 'Search the address or use your location on site'}</small></span>
-        {spot ? <Check size={20}/> : <Plus size={20}/>}
-      </button>
-      <div className="grid-2">
-        <label className="field">City or town<input name="city" value={city} onChange={e => setCity(e.target.value)} placeholder="e.g. Mthatha" required minLength={2} maxLength={100}/></label>
-        <label className="field">Province
-          <select name="province" required value={province} onChange={e => setProvince(e.target.value)}>
-            <option value="" disabled>Select province</option>
-            {provinces.map(p => <option key={p}>{p}</option>)}
-          </select>
-        </label>
-      </div>
-      <label className="field">Hire people within (miles)<input name="radius" type="number" inputMode="numeric" min="1" max="120" defaultValue="15" required/></label>
-
-      <h2 className="form-step"><span>3</span>Pay and time</h2>
-      <div className="grid-2">
-        <label className="field">Pay (R)<input name="pay" type="number" inputMode="decimal" min="0.01" max="1000000" step="0.01" placeholder="e.g. 65" required/></label>
-        <label className="field">Paid
-          <select name="payType" value={payType} onChange={e => setPayType(e.target.value)}>
-            <option value="hour">Per hour</option>
-            <option value="job">For the whole job</option>
-          </select>
-        </label>
-      </div>
-      <div className="grid-2">
-        <label className="field">Hours<input name="hours" type="number" inputMode="decimal" min="0.25" max="24" step="0.25" placeholder="e.g. 8" required/></label>
-        <label className="field">Starts (SAST)<input name="start" type="datetime-local" required/></label>
-      </div>
-
-      <h2 className="form-step"><span>4</span>Contact</h2>
-      <label className="field">Public contact details<input name="contact" placeholder="Business phone, WhatsApp or email" required minLength={2} maxLength={200}/>
-        <small>Shown to workers in your hiring area.</small>
-      </label>
-      <p className="hint-box">The pay is what you offer the worker. There’s no posting fee, and payment is arranged directly between you.</p>
-      <label className="check"><input type="checkbox" name="confirm" required/><span>These details are accurate and I’m allowed to post this job.</span></label>
-      {error && <p role="alert" className="alert">{error}</p>}
-      <button className="btn btn-primary btn-block btn-lg" disabled={busy}>
-        {busy ? <LoaderCircle size={18} className="spin"/> : <Plus size={18}/>}{busy ? 'Posting…' : 'Post this job'}
-      </button>
-    </form>
   );
 }

@@ -212,12 +212,6 @@ svg { flex-shrink: 0; }
 .sp-sidebar .sp-logo { grid-row: auto; }
 .sp-sidebar .sp-cta { grid-column: 1; width: 100%; justify-content: center; }
 
-.ad { display: grid; gap: 6px; justify-items: start; }
-.ad .adsbygoogle { width: 100%; background: var(--surface-2); border-radius: var(--radius-sm); }
-.ad-feed { grid-column: 1 / -1; }
-.ad-feed .adsbygoogle { min-height: 120px; }
-.ad-article { margin: 6px 0; width: 100%; }
-.ad-article .adsbygoogle, .ad-sidebar .adsbygoogle { min-height: 250px; }
 .ad:has(ins[data-ad-status="unfilled"]) { display: none; }
 
 .hanging { display: none; }
@@ -774,7 +768,9 @@ button.link { padding: 0; }
 .randy-head strong { font-size: 18px; font-family: var(--display); }
 .randy-face { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.18); border: 2px solid rgba(255,255,255,.35); }
 .dot-live { width: 8px; height: 8px; border-radius: 50%; background: #9ef0c4; box-shadow: 0 0 0 3px rgba(158,240,196,.3); }
-.randy-list { position: relative; display: grid; gap: 12px; align-content: start; padding: 18px; height: min(460px, 58vh); overflow-y: auto; background: var(--bg); }
+.randy-list { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 18px; min-height: 220px; background: var(--bg); }
+.randy-list > * { flex-shrink: 0; }
+.randy-list .bubble-row { scroll-margin-top: 90px; }
 .bubble-row { display: flex; gap: 8px; align-items: flex-end; }
 .bubble-row.me { justify-content: flex-end; }
 .bubble-col { display: grid; gap: 8px; max-width: min(84%, 560px); }
@@ -971,7 +967,6 @@ td, dd { overflow-wrap: anywhere; }
 
 /* ---------- Randy: back to topics ---------- */
 .randy-foot { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; padding: 8px 12px 12px; }
-.randy-chips button.chip-back { border-style: dashed; color: var(--green); }
 @media (max-width: 640px) {
   .admin-dash .hq-badge { display: none; }
   .admin-dash .dash-hero-row { gap: 10px; }
@@ -1013,3 +1008,25 @@ td, dd { overflow-wrap: anywhere; }
 .cancel-timer.soon { background: var(--amber-soft); color: var(--amber); }
 .cancel-timer.soon i { background: var(--amber); }
 .cancel-timer.over { background: var(--surface-2); color: var(--muted); margin: 0; }
+
+/* ---------- Affiliate ads: image banners ---------- */
+.sponsored.sp-image { padding: 12px 12px 10px; gap: 8px; }
+.sp-banner { display: block; border-radius: 12px; overflow: hidden; background: var(--surface-2); }
+.sp-banner img { display: block; width: 100%; height: auto; }
+.sp-sidebar.sp-image .sp-banner img { max-height: 600px; object-fit: contain; }
+.hanging.hang-image { padding: 4px; }
+.hanging.hang-image img { display: block; width: 100%; max-height: 100px; object-fit: contain; border-radius: 10px; }
+.promo-thumb { width: 64px; height: 48px; border-radius: 10px; object-fit: cover; background: var(--surface-2); flex: none; }
+.promo-thumb.text { display: grid; place-items: center; font: 800 16px var(--display); color: var(--muted); }
+.promo-row { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+@media (max-width: 700px) { .promo-row { grid-template-columns: auto minmax(0, 1fr); } .promo-stats, .promo-actions { grid-column: 1 / -1; } }
+.upload-box { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 14px; border: 1.5px dashed var(--line-strong); background: var(--surface-2); cursor: pointer; font-weight: 400; }
+.upload-box:hover { border-color: var(--green); }
+.upload-box > svg { color: var(--green); flex: none; }
+.upload-box strong { display: block; }
+.upload-box small { display: block; color: var(--muted); font-size: 12.5px; }
+.spot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.spot { display: grid; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line-strong); background: var(--surface); }
+.spot strong { font-size: 14px; }
+.spot small { font-size: 12px; color: var(--muted); }
+.spot.on { border-color: var(--green); background: var(--green-soft); }

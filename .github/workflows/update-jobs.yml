@@ -12,6 +12,8 @@ on:
     paths:
       - scripts/fetch-jobs.mjs
       - scripts/sa-places.mjs
+      - scripts/ats.mjs
+      - scripts/sa-employers.mjs
       - .github/workflows/update-jobs.yml
       - jooble-boost.json
 

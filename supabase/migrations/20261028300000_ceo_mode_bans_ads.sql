@@ -1,5 +1,5 @@
 -- Update 10: separate bans and pauses for working and for a business (or the whole account), CEO view for team accounts,
--- and sponsored offers on the job pages that the CEO edits from the dashboard.
+-- and affiliate ads on the job pages that the CEO adds from the dashboard (text cards or uploaded image banners).
 -- Safe to run again. Run after the earlier updates.
 
 -- ---------------------------------------------------------------- new profile fields
@@ -241,7 +241,7 @@ $$;
 revoke execute on function public.admin_users(text, int, int) from public, anon;
 grant execute on function public.admin_users(text, int, int) to authenticated;
 
--- ---------------------------------------------------------------- sponsored offers on the job pages
+-- ---------------------------------------------------------------- affiliate ads on the job pages
 alter table public.app_settings add column if not exists promos_enabled boolean not null default true;
 
 create table if not exists public.promos (
@@ -283,6 +283,21 @@ drop policy if exists "ceo deletes promos" on public.promos;
 create policy "ceo deletes promos" on public.promos for delete using (public.is_ceo());
 grant select on public.promos to anon, authenticated;
 grant insert, update, delete on public.promos to authenticated;
+
+-- Image banners: an uploaded picture shown instead of the text card. Stored in the public 'promos' bucket, CEO uploads only.
+alter table public.promos add column if not exists image text check (image is null or (image ~ '^https://' and char_length(image) <= 600));
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('promos', 'promos', true, 3145728, array['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+on conflict (id) do nothing;
+drop policy if exists "ceo uploads ad images" on storage.objects;
+create policy "ceo uploads ad images" on storage.objects for insert to authenticated with check (bucket_id = 'promos' and public.is_ceo());
+drop policy if exists "ceo replaces ad images" on storage.objects;
+create policy "ceo replaces ad images" on storage.objects for update to authenticated using (bucket_id = 'promos' and public.is_ceo());
+drop policy if exists "ceo deletes ad images" on storage.objects;
+create policy "ceo deletes ad images" on storage.objects for delete to authenticated using (bucket_id = 'promos' and public.is_ceo());
+drop policy if exists "ceo lists ad images" on storage.objects;
+create policy "ceo lists ad images" on storage.objects for select to authenticated using (bucket_id = 'promos' and public.is_ceo());
 
 create or replace function public.promos_touch() returns trigger language plpgsql security definer set search_path = public as $$
 begin

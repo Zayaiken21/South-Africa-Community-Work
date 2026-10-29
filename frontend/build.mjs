@@ -75,7 +75,7 @@ self.addEventListener('fetch',e=>{
     return;
   }
   if(r.mode==='navigate'){e.respondWith(fetch(r,{cache:'no-cache'}).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(async()=>(await caches.match(r,{ignoreSearch:true}))||caches.match('./offline.html')));return;}
-  if(u.pathname.endsWith('/data/jobs-feed.json')||u.pathname.endsWith('/ads-config.json')||u.pathname.endsWith('/affiliates.json')||u.pathname.endsWith('/backend-config.json')||u.pathname.endsWith('/analytics-config.json')||u.pathname.endsWith('/support-config.json')){e.respondWith(fetch(r,{cache:'no-cache'}).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(()=>caches.match(r,{ignoreSearch:true})));return;}
+  if(u.pathname.endsWith('/data/jobs-feed.json')||u.pathname.endsWith('/backend-config.json')||u.pathname.endsWith('/analytics-config.json')||u.pathname.endsWith('/support-config.json')){e.respondWith(fetch(r,{cache:'no-cache'}).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));return res;}).catch(()=>caches.match(r,{ignoreSearch:true})));return;}
   e.respondWith(caches.match(r).then(hit=>hit||fetch(r).then(res=>{if(res.ok){const copy=res.clone();caches.open(CACHE).then(c=>c.put(r,copy));}return res;})));
 });
 `);
